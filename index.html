@@ -13,29 +13,40 @@
 <link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bark:#2F3B2A; --lichen:#E6E9DF; --cap:#8A5A2B; --spore:#C9A36A; --ink:#23291F; --muted:#566050;
+    --bark:#2F3B2A; --lichen:#E6E9DF; --cap:#8A5A2B; --spore:#C9A36A; --ink:#23291F; --muted:#566050; --line:#CFD4C4;
     --s0:#DCDDD2; --s1:#D9C98F; --s2:#C39A4E; --s3:#8A5A2B; --s4:#4E2F17;
   }
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;font-family:"Alegreya Sans",system-ui,sans-serif;color:var(--ink);background:var(--lichen)}
   #map{position:fixed;inset:0}
+  .leaflet-image-layer{image-rendering:pixelated;image-rendering:crisp-edges}
   .leaflet-control-attribution{font-size:10px}
-  button:focus-visible{outline:3px solid var(--spore);outline-offset:2px}
+  button:focus-visible,a:focus-visible{outline:3px solid var(--spore);outline-offset:2px}
 
   .top{position:fixed;top:calc(env(safe-area-inset-top) + 10px);left:0;right:0;z-index:500;pointer-events:none}
   .row{display:flex;gap:6px;padding:0 10px;pointer-events:auto}
   .row + .row{margin-top:8px}
-  .groups{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .groups{overflow-x:auto;scrollbar-width:none}
   .groups::-webkit-scrollbar{display:none}
   .chip{flex:none;background:var(--lichen);color:var(--bark);border:0;border-radius:999px;
-    padding:9px 14px;font:500 15px/1 "Alegreya Sans",sans-serif;box-shadow:0 2px 8px rgba(35,41,31,.3);white-space:nowrap}
+    padding:9px 14px;font:500 15px/1 "Alegreya Sans",sans-serif;box-shadow:0 2px 8px rgba(35,41,31,.3);white-space:nowrap;cursor:pointer}
   .chip[aria-pressed="true"]{background:var(--bark);color:var(--lichen)}
   .chip .n{font-variant-numeric:tabular-nums;opacity:.7;margin-left:4px}
   .spacer{flex:1}
+  .days{overflow-x:auto;scrollbar-width:none}
+  .days::-webkit-scrollbar{display:none}
+  .chip.day{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 12px;font-size:14px}
+  .chip.day .rel{display:block;width:26px;height:3px;border-radius:2px;background:currentColor}
+  .rel.r1{opacity:.9}.rel.r2{opacity:.45}.rel.r3{opacity:.18}
+  .spark{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;align-items:end;height:44px;margin:8px 0 2px}
+  .spark span{background:var(--s2);border-radius:2px 2px 0 0;min-height:2px}
+  .spark span.sel{background:var(--cap)}
+  .spark-l{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;font-size:11px;color:var(--muted);text-align:center}
+  .verify{margin-top:14px;padding:12px 14px;background:#DDE3D3;border-radius:10px;font-size:15px;line-height:1.4}
 
   .sheet{position:fixed;left:0;right:0;bottom:0;z-index:600;background:var(--lichen);
     border-radius:22px 22px 0 0;box-shadow:0 -4px 20px rgba(35,41,31,.25);
-    padding:8px 20px calc(env(safe-area-inset-bottom) + 16px);max-height:75vh;overflow:auto;
+    padding:8px 20px calc(env(safe-area-inset-bottom) + 16px);max-height:78vh;overflow:auto;
     transform:translateY(calc(100% - 132px));transition:transform .28s ease}
   .sheet.open{transform:none}
   @media (prefers-reduced-motion:reduce){.sheet{transition:none}}
@@ -53,16 +64,27 @@
   .scale span:nth-child(5){background:var(--s4)}
   .scale-labels{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
 
-  .info{margin-top:20px;font-size:16px;line-height:1.45;max-width:60ch}
-  .info h2{font-size:17px;margin:16px 0 4px}
+  h2{font-size:17px;margin:22px 0 8px}
+  .zones{list-style:none;margin:0;padding:0}
+  .zone{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;width:100%;text-align:left;
+    background:none;border:0;border-bottom:1px solid var(--line);padding:10px 0;font:inherit;color:inherit;cursor:pointer}
+  .zone .z{font-weight:800;font-size:26px;color:var(--cap);min-width:44px;font-variant-numeric:tabular-nums}
+  .zone .d{font-size:15px;line-height:1.3}
+  .zone .d small{display:block;color:var(--muted);font-size:14px}
+  .zone .tr{font-size:14px;color:var(--muted);white-space:nowrap}
+  .empty{color:var(--muted);font-size:15px;margin:0}
+
+  .info{font-size:16px;line-height:1.45;max-width:60ch}
   .info p{margin:0}
+  .info h2{margin-top:18px}
   .danger{margin-top:16px;padding:12px 14px;border-left:4px solid #9B2F1A;background:#EFDDD3;border-radius:0 10px 10px 0}
   .danger h2{margin-top:0;color:#7A2412}
   .note{font-size:14px;line-height:1.45;color:var(--muted);margin:20px 0 0;max-width:60ch}
 
-  .popup{font-family:"Alegreya Sans",sans-serif;font-size:14px;min-width:190px}
+  .popup{font-family:"Alegreya Sans",sans-serif;font-size:14px;min-width:200px}
   .popup strong{font-size:16px}
   .popup img{width:100%;border-radius:8px;margin-top:6px}
+  .popup a{display:inline-block;margin-top:8px}
   .popup dl{display:grid;grid-template-columns:auto auto;gap:2px 10px;margin:6px 0 0}
   .popup dt{color:var(--muted)}.popup dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
   .tag{display:inline-block;font-size:12px;padding:2px 7px;border-radius:6px;background:#E3E0C9;color:#5B4A1E}
@@ -71,10 +93,11 @@
 </style>
 </head>
 <body>
-<div id="map" role="application" aria-label="Mappa delle condizioni di crescita dei funghi commestibili"></div>
+<div id="map" role="application" aria-label="Mappa delle zone favorevoli ai funghi commestibili"></div>
 
 <div class="top">
   <div class="row groups" id="groups" role="toolbar" aria-label="Scegli il fungo"></div>
+  <div class="row days" id="days" role="toolbar" aria-label="Scegli il giorno"></div>
   <div class="row">
     <button class="chip" id="locate">La mia posizione</button>
     <span class="spacer"></span>
@@ -90,42 +113,207 @@
   </div>
   <div class="scale" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
   <div class="scale-labels"><span>Condizioni scarse</span><span>Ottime</span></div>
+
+  <h2 id="zonesTitle">Zone migliori</h2>
+  <ul class="zones" id="zones"></ul>
+
   <div class="info" id="info"></div>
-  <p class="note">L'indice stima quanto stagione, quota, meteo e suolo favoriscono la crescita: non garantisce la presenza del fungo e non serve a riconoscerlo. Gli avvistamenti vengono da iNaturalist e possono essere identificati male. Prima di mangiare qualsiasi fungo raccolto fallo controllare all'ispettorato micologico della tua ASL, e verifica le regole regionali su tesserino e quantità.</p>
+  <p class="note">L'indice stima quanto stagione, quota, tipo di bosco, esposizione, pioggia, suolo e temperature favoriscono la crescita: non dice quanti funghi ci saranno, non garantisce che ci siano e non serve a riconoscerli. Oltre i 4–5 giorni dipende dalle previsioni meteo ed è meno affidabile. Le celle da circa 1 km possono includere proprietà private o aree protette con regole proprie. Gli avvistamenti vengono da iNaturalist e possono essere identificati male. Prima di mangiare qualsiasi fungo raccolto fallo controllare all'ispettorato micologico della tua ASL, e verifica le regole regionali su tesserino e quantità.</p>
 </section>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script>
-const COLORS = ["#DCDDD2","#D9C98F","#C39A4E","#8A5A2B","#4E2F17"];
+const COLORS = [[220,221,210],[217,201,143],[195,154,78],[138,90,43],[78,47,23]];
 const MONTHS = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
-const colorFor = s => COLORS[Math.min(4, Math.floor(s / 20))];
+const DIRS = ["nord","nord-est","est","sud-est","sud","sud-ovest","ovest","nord-ovest"];
+const LAPSE = 0.0065;
 const label = s => s >= 80 ? "condizioni ottime" : s >= 60 ? "condizioni buone" :
                    s >= 40 ? "condizioni discrete" : s >= 20 ? "condizioni scarse" : "condizioni sfavorevoli";
+const trendText = t => t >= 8 ? "↑ in miglioramento" : t <= -8 ? "↓ in peggioramento" : "→ stabile";
+const relClass = r => r >= 0.75 ? 1 : r >= 0.5 ? 2 : 3;
+const relText = r => ["", "affidabilità alta", "affidabilità media", "affidabilità bassa"][relClass(r)];
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const km = (a, b, c, d) => { const R = 6371, r = Math.PI / 180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r; return R * Math.hypot(x, y); };
+const getJSON = u => fetch(u, { cache: "no-cache" }).then(r => { if (!r.ok) throw new Error(u); return r.json(); });
 
 const map = L.map("map", { preferCanvas: true, zoomControl: false }).setView([43.4, 11.0], 8);
 L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
-  maxZoom: 17, attribution: "© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)" }).addTo(map);
-const indexLayer = L.layerGroup().addTo(map);
+  maxZoom: 17, attribution: "© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA) | ESA WorldCover, Copernicus DEM e HRL Forest" }).addTo(map);
 const obsLayer = L.layerGroup().addTo(map);
+const zoneLayer = L.layerGroup().addTo(map);
 
-let DATA, GROUPS, current, focusCell = null, obsOn = true;
-const rects = [], markers = [];
+let DATA, GROUPS, CAL = {}, CELLS = null, current, day = 0, overlay = null, me = null, focus = null, lastPoint = null, obsOn = true;
+const layers = {};
+const markers = [];
 
-const scoreOf = c => c.s[current.id] ?? 0;
-const avgScore = () => Math.round(DATA.cells.reduce((a, c) => a + scoreOf(c), 0) / Math.max(1, DATA.cells.length));
-
-function cellPopup(c) {
-  return `<div class="popup"><strong>${esc(current.name)}: ${label(scoreOf(c))}</strong> (${scoreOf(c)}/100)
-    <dl><dt>Pioggia 5–14 gg fa</dt><dd>${c.rain_5_14} mm</dd>
-    <dt>Pioggia ultimi 5 gg</dt><dd>${c.rain_0_4} mm</dd>
-    <dt>Minime medie 7 gg</dt><dd>${c.tmin7} °C</dd>
-    <dt>Massime medie 7 gg</dt><dd>${c.tmax7} °C</dd>
-    <dt>Umidità suolo</dt><dd>${Math.round((c.soil7 ?? 0) * 100)} %</dd>
-    <dt>Quota media cella</dt><dd>${c.elev} m</dd></dl></div>`;
+function dayLabel(iso, n, short = false) {
+  if (n === 0) return "Oggi";
+  if (n === 1) return "Domani";
+  const d = new Date(iso + "T12:00:00");
+  return d.toLocaleDateString("it-IT", short ? { weekday: "narrow" } : { weekday: "short", day: "numeric" });
 }
+
+function loadCells() {
+  if (!CELLS) CELLS = getJSON("data/cells.json").then(c => { c.pos = new Map(c.i.map((v, j) => [v, j])); return c; });
+  return CELLS;
+}
+function loadLayer(id) {
+  if (!layers[id]) layers[id] = getJSON(`data/layers/${id}.json`).then(l => { l.pos = new Map(l.i.map((v, j) => [v, j])); return l; });
+  return layers[id];
+}
+
+function drawLayer(l) {
+  const g = DATA.grid, cv = document.createElement("canvas");
+  cv.width = g.cols; cv.height = g.rows;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(g.cols, g.rows), sd = l.s[day];
+  l.i.forEach((idx, j) => {
+    const s = sd[j];
+    if (s < 5) return;
+    const r = Math.floor(idx / g.cols), c = idx % g.cols;
+    const p = ((g.rows - 1 - r) * g.cols + c) * 4, col = COLORS[Math.min(4, Math.floor(s / 20))];
+    img.data[p] = col[0]; img.data[p + 1] = col[1]; img.data[p + 2] = col[2];
+    img.data[p + 3] = s < 20 ? 70 : 185;
+  });
+  ctx.putImageData(img, 0, 0);
+  if (overlay) map.removeLayer(overlay);
+  overlay = L.imageOverlay(cv.toDataURL(), [[g.south, g.west], [g.south + g.rows * g.step, g.west + g.cols * g.step]],
+    { interactive: false }).addTo(map);
+  overlay.bringToBack();
+}
+
+function seasonMonths(g) {
+  const c = CAL[g.id];
+  if (c && c.month_w) return { months: c.month_w.map((w, i) => w >= 0.5 ? i + 1 : 0).filter(Boolean), cal: true };
+  return { months: g.months, cal: false };
+}
+
+async function refresh() {
+  document.querySelectorAll("#groups .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.id === current.id));
+  document.querySelectorAll("#days .chip").forEach(b => b.setAttribute("aria-pressed", +b.dataset.d === day));
+  drawLayer(await loadLayer(current.id));
+  renderZones();
+  if (lastPoint) await showPoint(lastPoint.latlng, lastPoint.near, false);
+  updateHeader();
+}
+
+function selectGroup(g) {
+  current = g; focus = null; lastPoint = null; map.closePopup();
+  obsLayer.clearLayers();
+  markers.forEach(([m, o]) => { if (o.group === g.id) m.addTo(obsLayer); });
+  renderInfo();
+  refresh();
+}
+function selectDay(d) { day = d; refresh(); }
+
+function updateHeader() {
+  const zones = DATA.zones[current.id]?.[day] || [], dd = DATA.days[day];
+  const when = `${dayLabel(dd.date, day).toLowerCase()}`, rel = day >= 3 ? ` · ${relText(dd.reliability)}` : "";
+  if (focus) {
+    $("score").textContent = focus.s;
+    $("title").textContent = `${current.name}: ${label(focus.s)}`;
+    $("subtitle").textContent = `${focus.near ? "Vicino a te" : "Punto selezionato"}, ${when}${rel}`;
+    return;
+  }
+  if (zones.length) {
+    $("score").textContent = zones[0].max;
+    $("title").textContent = `${current.name}: ${zones.length} ${zones.length === 1 ? "zona favorevole" : "zone favorevoli"}`;
+  } else {
+    $("score").textContent = "–";
+    $("title").textContent = `${current.name}: nessuna zona favorevole`;
+  }
+  const updated = new Date(DATA.generated_at).toLocaleString("it-IT", { weekday: "long", hour: "2-digit", minute: "2-digit" });
+  $("subtitle").textContent = `${cap(when)}${rel} · aggiornato ${updated}`;
+}
+
+function renderZones() {
+  const zones = DATA.zones[current.id]?.[day] || [];
+  $("zonesTitle").textContent = `Zone migliori ${day === 0 ? "oggi" : day === 1 ? "domani" : dayLabel(DATA.days[day].date, day)}`;
+  zoneLayer.clearLayers();
+  if (!zones.length) { $("zones").innerHTML = `<li><p class="empty">Nessuna zona supera la soglia in questo giorno. Prova a scorrere i giorni successivi.</p></li>`; return; }
+  const list = zones.map((z, n) => ({ ...z, n, dist: me ? km(me[0], me[1], z.lat, z.lon) : null }));
+  if (me) list.sort((a, b) => a.dist - b.dist);
+  const nextLabel = day < DATA.days.length - 1 ? "il giorno dopo" : "";
+  $("zones").innerHTML = list.map(z => `<li><button class="zone" data-n="${z.n}">
+      <span class="z">${z.mean}</span>
+      <span class="d">Zona ${z.n + 1}${z.dist != null ? `, a ${Math.round(z.dist)} km` : ""}
+        <small>${z.km2} km² · ${z.elev[0]}–${z.elev[1]} m · punta ${z.max}</small></span>
+      <span class="tr">${nextLabel ? trendText(z.trend) : ""}</span></button></li>`).join("");
+  zones.forEach(z => L.rectangle([[z.bounds[0], z.bounds[1]], [z.bounds[2], z.bounds[3]]],
+    { color: "#2F3B2A", weight: 2, dashArray: "5 4", fill: false, interactive: false }).addTo(zoneLayer));
+  document.querySelectorAll(".zone").forEach(b => b.onclick = () => {
+    const z = zones[+b.dataset.n];
+    $("sheet").classList.remove("open"); $("handle").setAttribute("aria-expanded", false);
+    map.fitBounds([[z.bounds[0], z.bounds[1]], [z.bounds[2], z.bounds[3]]], { padding: [40, 40], maxZoom: 14 });
+    showPoint(L.latLng(z.lat, z.lon));
+  });
+}
+
+function renderInfo() {
+  const g = current, { months, cal } = seasonMonths(g);
+  const inSeason = months.includes(new Date().getMonth() + 1);
+  const c = CAL[g.id] || {}, elev = c.elev || g.elev;
+  const n = (DATA.counts || {})[g.id] || 0;
+  const habitat = { forest: "bosco", open: "prati e arbusteti", edge: "margini tra bosco e prato" }[g.cover];
+  const leaf = { broad: ", preferendo le latifoglie", conifer: ", preferendo le conifere", any: "" }[g.leaf || "any"];
+  const m = DATA.model || {}, mg = (m.groups || {})[g.id], glob = m.global;
+  let verify;
+  if (mg && mg.auc) {
+    verify = `Verifica sul passato: su ${mg.n} ritrovamenti confermati degli ultimi anni, il giorno del ritrovamento ha avuto un indice meteo più alto dello stesso periodo di altri anni nel <strong>${Math.round(mg.auc * 100)}%</strong> dei casi (50% sarebbe come tirare a indovinare).`;
+  } else if (glob && glob.auc) {
+    verify = `Per questa specie i ritrovamenti in regione sono troppo pochi per una verifica separata${mg ? ` (${mg.n})` : ""}. Su tutte le specie insieme il modello ci azzecca nel <strong>${Math.round(glob.auc * 100)}%</strong> dei casi (${glob.n} ritrovamenti; 50% = a caso).`;
+  } else {
+    verify = "Verifica sul passato non ancora disponibile: il meteo storico viene scaricato a rate, servono alcune settimane.";
+  }
+  $("info").innerHTML = `
+    <div class="verify">${verify}</div>
+    <h2>Stagione e quota</h2>
+    <p>${months.map(m => MONTHS[m - 1]).join(", ")}${inSeason ? "" : " (ora fuori stagione)"}, ${elev[0]}–${elev[1]} m.
+    ${cal || c.elev ? "Calcolate sulle osservazioni confermate in regione." : "Valori generici: in regione le osservazioni sono poche."}</p>
+    <h2>Dove cresce</h2><p>${esc(g.habitat)} La mappa considera le celle con ${habitat}${leaf}.</p>
+    <h2>Avvistamenti negli ultimi 14 giorni</h2><p>${n ? `${n} in regione.` : "Nessuno in regione."}</p>
+    <div class="danger"><h2>Sosia pericolosi</h2><p>${esc(g.lookalikes)}</p>
+    ${g.caution ? `<p style="margin-top:8px">${esc(g.caution)}</p>` : ""}</div>`;
+}
+
+async function showPoint(latlng, near = false, open = true) {
+  const g = DATA.grid;
+  const r = Math.floor((latlng.lat - g.south) / g.step), c = Math.floor((latlng.lng - g.west) / g.step);
+  if (r < 0 || c < 0 || r >= g.rows || c >= g.cols) return;
+  lastPoint = { latlng, near };
+  const idx = r * g.cols + c;
+  const [cells, layer] = await Promise.all([loadCells(), loadLayer(current.id)]);
+  const cj = cells.pos.get(idx), lj = layer.pos.get(idx);
+  let html;
+  if (cj === undefined) {
+    html = `<div class="popup"><strong>Nessun habitat adatto</strong><br>Coltivi, centri abitati, acqua o fuori regione.</div>`;
+    focus = null;
+  } else {
+    const series = DATA.days.map((_, d) => lj === undefined ? 0 : layer.s[d][lj]);
+    const s = series[day], k = cells.k[cj], w = DATA.days[day], dz = cells.e[cj] - DATA.w_elev[k];
+    const dir = cells.sl[cj] < 4 ? "pianeggiante" : DIRS[Math.round(cells.a[cj] / 45) % 8];
+    const leafTxt = cells.fb && (cells.fb[cj] + cells.fc[cj]) > 0 ? `<dt>Latifoglie / conifere</dt><dd>${cells.fb[cj]} % / ${cells.fc[cj]} %</dd>` : "";
+    focus = { s, near };
+    html = `<div class="popup"><strong>${esc(current.name)}: ${label(s)}</strong> (${s}/100)<br>
+      ${cap(dayLabel(w.date, day))}${day >= 3 ? `, ${relText(w.reliability)}` : ""}
+      <div class="spark" aria-label="Indice nei prossimi giorni">${series.map((v, d) => `<span class="${d === day ? "sel" : ""}" style="height:${Math.max(4, v)}%" title="${v}"></span>`).join("")}</div>
+      <div class="spark-l">${DATA.days.map((x, d) => `<span>${d === 0 ? "oggi" : new Date(x.date + "T12:00:00").toLocaleDateString("it-IT", { weekday: "narrow" })}</span>`).join("")}</div>
+      <dl><dt>Quota media</dt><dd>${cells.e[cj]} m</dd>
+      <dt>Esposizione</dt><dd>${dir}${cells.sl[cj] >= 4 ? `, ${cells.sl[cj]}°` : ""}</dd>
+      <dt>Bosco / prati</dt><dd>${cells.ft[cj]} % / ${cells.fo[cj]} %</dd>${leafTxt}
+      <dt>Pioggia utile</dt><dd>${w.rain[k]} mm</dd>
+      <dt>Pioggia del giorno</dt><dd>${w.day_rain[k]} mm</dd>
+      <dt>Umidità suolo</dt><dd>${Math.round(w.soil[k] * 100)} %</dd>
+      <dt>Minime a questa quota</dt><dd>${(w.tmin[k] - LAPSE * dz).toFixed(1)} °C</dd>
+      <dt>Massime a questa quota</dt><dd>${(w.tmax[k] - LAPSE * dz).toFixed(1)} °C</dd></dl>
+      <a href="https://www.google.com/maps/search/?api=1&query=${latlng.lat.toFixed(5)},${latlng.lng.toFixed(5)}" target="_blank" rel="noopener">Apri in Google Maps</a></div>`;
+  }
+  if (open || map.hasLayer(popup)) popup.setLatLng(latlng).setContent(html).openOn(map);
+  updateHeader();
+}
+const popup = L.popup();
+popup.on("remove", () => { focus = null; lastPoint = null; if (DATA) updateHeader(); });
 
 function obsPopup(o) {
   const g = GROUPS.find(x => x.id === o.group);
@@ -136,84 +324,15 @@ function obsPopup(o) {
     <br><a href="${esc(o.url)}" target="_blank" rel="noopener">Apri su iNaturalist</a></div>`;
 }
 
-function buildMap() {
-  const h = DATA.grid_step / 2;
-  DATA.cells.forEach(c => {
-    const r = L.rectangle([[c.lat - h, c.lon - h], [c.lat + h, c.lon + h]], { stroke: false })
-      .bindPopup(() => cellPopup(c)).on("click", () => { focusCell = c; updateSheet(); });
-    rects.push([r, c]); r.addTo(indexLayer);
-  });
-  DATA.observations.forEach(o => {
-    const m = L.circleMarker([o.lat, o.lon], { radius: 7, color: "#2F3B2A", weight: 2, fillColor: "#E6E9DF", fillOpacity: 1 })
-      .bindPopup(() => obsPopup(o));
-    markers.push([m, o]);
-  });
-  const b = DATA.bbox;
-  map.fitBounds([[b.south, b.west], [b.north, b.east]]);
-}
-
-function selectGroup(g) {
-  current = g;
-  document.querySelectorAll("#groups .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.id === g.id));
-  rects.forEach(([r, c]) => {
-    const s = scoreOf(c);
-    r.setStyle({ fillColor: colorFor(s), fillOpacity: s < 20 ? .2 : .55 });
-  });
-  obsLayer.clearLayers();
-  markers.forEach(([m, o]) => { if (o.group === g.id) m.addTo(obsLayer); });
-  updateSheet();
-}
-
-function updateSheet() {
-  const g = current;
-  const inSeason = g.months.includes(new Date().getMonth() + 1);
-  if (focusCell) {
-    const s = scoreOf(focusCell);
-    $("score").textContent = s;
-    $("title").textContent = `${g.name}: ${label(s)}`;
-    $("subtitle").textContent = focusCell.near ? "Nella zona più vicina a te" : "Nella zona selezionata";
-  } else {
-    const a = avgScore();
-    $("score").textContent = a;
-    $("title").textContent = `${g.name}: ${label(a)}`;
-    const updated = new Date(DATA.generated_at).toLocaleString("it-IT", { weekday: "long", hour: "2-digit", minute: "2-digit" });
-    $("subtitle").textContent = `Media ${DATA.region}, aggiornata ${updated}`;
-  }
-  const n = (DATA.counts || {})[g.id] || 0;
-  $("info").innerHTML = `
-    <p><strong>Stagione:</strong> ${g.months.map(m => MONTHS[m - 1]).join(", ")}${inSeason ? "" : " (ora fuori stagione)"}.
-    <strong>Quota:</strong> ${g.elev[0]}–${g.elev[1]} m.</p>
-    <h2>Dove cresce</h2><p>${esc(g.habitat)}</p>
-    <h2>Avvistamenti negli ultimi 14 giorni</h2><p>${n ? `${n} in regione.` : "Nessuno in regione."}</p>
-    <div class="danger"><h2>Sosia pericolosi</h2><p>${esc(g.lookalikes)}</p>
-    ${g.caution ? `<p style="margin-top:8px">${esc(g.caution)}</p>` : ""}</div>`;
-}
-
-function buildChips() {
-  const bar = $("groups");
-  GROUPS.forEach(g => {
-    const b = document.createElement("button");
-    b.className = "chip"; b.dataset.id = g.id;
-    const n = (DATA.counts || {})[g.id];
-    b.innerHTML = `${esc(g.name)}${n ? `<span class="n">${n}</span>` : ""}`;
-    b.onclick = () => selectGroup(g);
-    bar.appendChild(b);
-  });
-}
+map.on("click", e => showPoint(e.latlng));
 
 $("locate").onclick = () => {
   if (!navigator.geolocation) return toast("Il browser non supporta la geolocalizzazione.");
   navigator.geolocation.getCurrentPosition(p => {
-    const { latitude: lat, longitude: lon } = p.coords;
-    map.setView([lat, lon], 11);
-    L.circleMarker([lat, lon], { radius: 8, color: "#fff", weight: 3, fillColor: "#3A6EA5", fillOpacity: 1 }).addTo(map);
-    if (!DATA) return;
-    let best = null, d = Infinity;
-    for (const c of DATA.cells) {
-      const dd = (c.lat - lat) ** 2 + ((c.lon - lon) * Math.cos(lat * Math.PI / 180)) ** 2;
-      if (dd < d) { d = dd; best = c; }
-    }
-    if (best) { focusCell = { ...best, near: true }; updateSheet(); }
+    me = [p.coords.latitude, p.coords.longitude];
+    map.setView(me, 12);
+    L.circleMarker(me, { radius: 8, color: "#fff", weight: 3, fillColor: "#3A6EA5", fillOpacity: 1, bubblingMouseEvents: false }).addTo(map);
+    if (DATA) { renderZones(); showPoint(L.latLng(me[0], me[1]), true); }
   }, () => toast("Posizione non disponibile. Consenti l'accesso alla posizione nelle impostazioni del browser."));
 };
 $("toggleObs").onclick = () => {
@@ -228,23 +347,40 @@ function toast(msg) {
   document.body.appendChild(el); setTimeout(() => el.remove(), 6000);
 }
 
-Promise.all([
-  fetch("species.json", { cache: "no-cache" }).then(r => r.json()),
-  fetch("data/latest.json", { cache: "no-cache" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-]).then(([sp, data]) => {
-  GROUPS = sp.groups; DATA = data;
-  buildChips(); buildMap();
-  // parte dal fungo in stagione con l'indice medio più alto
-  const month = new Date().getMonth() + 1;
-  const pool = GROUPS.filter(g => g.months.includes(month));
-  current = GROUPS[0];
-  const best = (pool.length ? pool : GROUPS).map(g => { current = g; return [g, avgScore()]; }).sort((a, b) => b[1] - a[1])[0][0];
-  selectGroup(best);
-  document.querySelector(`#groups .chip[data-id="${best.id}"]`)?.scrollIntoView({ inline: "center", block: "nearest" });
-}).catch(() => {
-  $("title").textContent = "Dati non ancora disponibili";
-  $("subtitle").textContent = "Avvia il workflow «Aggiornamento dati funghi» da GitHub Actions.";
-});
+Promise.all([getJSON("species.json"), getJSON("data/latest.json"), getJSON("data/calibration.json").catch(() => ({}))])
+  .then(([sp, data, cal]) => {
+    if (!data.grid || !data.days) throw new Error("formato dati vecchio");
+    GROUPS = sp.groups; DATA = data; CAL = cal;
+    const b = DATA.bbox;
+    map.fitBounds([[b.south, b.west], [b.north, b.east]]);
+    GROUPS.forEach(g => {
+      const btn = document.createElement("button");
+      btn.className = "chip"; btn.dataset.id = g.id;
+      const n = (DATA.counts || {})[g.id];
+      btn.innerHTML = `${esc(g.name)}${n ? `<span class="n">${n}</span>` : ""}`;
+      btn.onclick = () => selectGroup(g);
+      $("groups").appendChild(btn);
+    });
+    DATA.days.forEach((d, n) => {
+      const btn = document.createElement("button");
+      btn.className = "chip day"; btn.dataset.d = n;
+      btn.innerHTML = `${esc(dayLabel(d.date, n))}<span class="rel r${relClass(d.reliability)}" aria-hidden="true"></span>`;
+      btn.title = cap(relText(d.reliability));
+      btn.onclick = () => selectDay(n);
+      $("days").appendChild(btn);
+    });
+    DATA.observations.forEach(o => markers.push([
+      L.circleMarker([o.lat, o.lon], { radius: 7, color: "#2F3B2A", weight: 2, fillColor: "#E6E9DF", fillOpacity: 1, bubblingMouseEvents: false }).bindPopup(() => obsPopup(o)), o]));
+    const rank = g => { const z = (DATA.zones[g.id] || [])[0] || []; return z.length ? z[0].mean + z.length : 0; };
+    const best = [...GROUPS].sort((a, b) => rank(b) - rank(a))[0];
+    selectGroup(best);
+    document.querySelector(`#groups .chip[data-id="${best.id}"]`)?.scrollIntoView({ inline: "center", block: "nearest" });
+    loadCells();
+  })
+  .catch(() => {
+    $("title").textContent = "Dati non ancora pronti";
+    $("subtitle").textContent = "Lancia «Preparazione dati statici» da GitHub Actions.";
+  });
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
 </script>

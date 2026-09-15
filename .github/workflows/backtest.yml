@@ -1,0 +1,28 @@
+name: Verifica sul passato
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 13 * * 1"   # ogni lunedì: scarica a rate il meteo storico, poi ritara ogni ~5 mesi
+concurrency: update-data
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy
+      - run: python scripts/backtest.py
+      - name: Commit archivio e modello
+        run: |
+          git config user.name "funghi-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for f in data/history.npz data/model.json data/taxa.json; do [ -f "$f" ] && git add "$f"; done
+          git diff --staged --quiet && exit 0
+          git commit -m "Verifica sul passato $(date -u +%F)"
+          git pull --rebase && git push

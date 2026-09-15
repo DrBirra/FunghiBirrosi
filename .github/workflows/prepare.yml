@@ -1,0 +1,36 @@
+name: Preparazione dati statici
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 10 1 */3 *"  # ogni 3 mesi alle 10 UTC (lontano da aggiornamento e verifica)
+concurrency: update-data
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      actions: write
+    env:
+      GDAL_DISABLE_READDIR_ON_OPEN: EMPTY_DIR
+      CPL_VSIL_CURL_ALLOWED_EXTENSIONS: .tif
+      GDAL_HTTP_MAX_RETRY: "5"
+      GDAL_HTTP_RETRY_DELAY: "3"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install numpy rasterio shapely
+      - run: python scripts/prepare_static.py
+      - name: Commit dati statici
+        run: |
+          git config user.name "funghi-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for f in data/static.npz data/cells.json data/calibration.json data/taxa.json data/area.json data/region.geojson; do [ -f "$f" ] && git add "$f"; done
+          git diff --staged --quiet || { git commit -m "Dati statici $(date -u +%F)"; git pull --rebase; git push; }
+      - name: Avvia l'aggiornamento giornaliero
+        run: gh workflow run update.yml
+        env:
+          GH_TOKEN: ${{ github.token }}

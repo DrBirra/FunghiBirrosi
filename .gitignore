@@ -1,1 +1,4 @@
 __pycache__/
+# generati ogni mattina e pubblicati direttamente su Pages
+data/latest.json
+data/layers/

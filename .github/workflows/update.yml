@@ -10,7 +10,7 @@ concurrency: update-data
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     permissions:
       contents: write
     steps:
@@ -18,18 +18,24 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      # Su push di codice riusa i dati esistenti; di mattina o a mano li rigenera
-      - name: Aggiorna dati
-        if: github.event_name != 'push' || hashFiles('data/latest.json') == ''
-        run: python scripts/update.py
-      - name: Commit dati
-        if: github.event_name != 'push' || hashFiles('data/latest.json') == ''
+      - run: pip install numpy
+      - name: Dati
+        run: |
+          if [ ! -f data/static.npz ]; then
+            echo "::warning::Manca data/static.npz: lancia «Preparazione dati statici»"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            python scripts/fetch_live.py || python scripts/update.py
+          else
+            python scripts/update.py
+          fi
+      - name: Commit cache taxa e pulizia file non più versionati
         run: |
           git config user.name "funghi-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/latest.json data/taxa.json
+          git rm -r --cached --ignore-unmatch --quiet data/latest.json data/layers
+          [ -f data/taxa.json ] && git add data/taxa.json
           git diff --staged --quiet && exit 0
-          git commit -m "Dati del $(date -u +%F)"
+          git commit -m "Aggiornamento $(date -u +%F)"
           git pull --rebase && git push
       - uses: actions/upload-pages-artifact@v3
         with:

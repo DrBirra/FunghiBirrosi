@@ -1,11 +1,27 @@
 {
-  "region_name": "Toscana",
-  "bbox": { "south": 42.23, "west": 9.68, "north": 44.47, "east": 12.37 },
-  "grid_step_deg": 0.1,
-  "boundary_geojson": "data/region.geojson",
-  "min_elevation_m": 1,
+  "regions": [
+    "Emilia-Romagna",
+    "Toscana",
+    "Liguria"
+  ],
+  "fine_step_deg": 0.01,
+  "weather_step_deg": 0.07,
   "past_days": 21,
+  "forecast_days": 7,
   "inat_days_back": 14,
   "inat_max_pages": 5,
-  "timezone": "Europe/Rome"
+  "calibration_max_pages": 10,
+  "timezone": "Europe/Rome",
+  "sources": {
+    "dem": "https://copernicus-dem-90m.s3.amazonaws.com/{name}/{name}.tif",
+    "landcover": "https://esa-worldcover.s3.eu-central-1.amazonaws.com/v200/2021/map/ESA_WorldCover_10m_2021_v200_{tile}_Map.tif",
+    "leaftype": "https://copernicus.discomap.eea.europa.eu/arcgis/rest/services/GioLandPublic/HRL_DominanteLeafType_2018/ImageServer/exportImage?bbox={west},{south},{east},{north}&bboxSR=4326&imageSR=4326&size={w},{h}&format=tiff&pixelType=U8&interpolation=RSP_NearestNeighbor&f=image",
+    "regions": "https://raw.githubusercontent.com/openpolis/geojson-italy/master/geojson/limits_IT_regions.geojson"
+  },
+  "backtest": {
+    "years": 3,
+    "max_points": 90,
+    "point_step_deg": 0.1,
+    "calls_per_run": 3000
+  }
 }

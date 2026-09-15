@@ -1,19 +1,38 @@
 # Mappa funghi
 
-Webapp statica (PWA) con un indice di crescita per ciascun fungo commestibile comune e i relativi avvistamenti recenti, aggiornata ogni mattina da GitHub Actions.
+PWA statica che mostra, per ogni fungo commestibile comune, le zone da circa 1 km più favorevoli oggi, con tendenza a 3 giorni e avvistamenti recenti. Tutto gira su GitHub Actions + Pages.
+
+## Come funziona
+**Preparazione (`prepare_static.py`, ogni 3 mesi o a mano)**
+- Confini delle regioni scelte in `config.json` scaricati da openpolis/geojson-italy (dati ISTAT); riquadro calcolato in automatico e salvato in `data/area.json`.
+- Griglia da 0,01° (circa 1 km) ritagliata sui confini.
+- Quota media, pendenza ed esposizione da Copernicus DEM GLO-90.
+- Frazione di bosco, prati/arbusteti, coltivi, urbano e acqua da ESA WorldCover 10 m; le celle senza habitat utile vengono scartate.
+- Calibrazione di quote e stagionalità di ogni specie sulle osservazioni confermate iNaturalist in regione (servono almeno 30–40 osservazioni, altrimenti restano i valori di `species.json`).
+
+**Aggiornamento (`update.py`, ogni mattina)**
+- Meteo Open-Meteo su celle da 0,07° (circa 6–8 km): 21 giorni passati e 7 di previsione. Per Emilia-Romagna, Toscana e Liguria sono circa 1.000–1.300 punti, ~2.500 chiamate al giorno.
+- Temperature riportate alla quota di ogni cella da 1 km (0,65 °C ogni 100 m).
+- Indice per specie e per giorno, da oggi a +6 = stagione × quota × habitat (bosco/prati, latifoglie/conifere) × temperature × acqua × esposizione.
+- Affidabilità per giorno: quanto l'indice dipende da pioggia e temperature previste invece che misurate.
+- Zone: gruppi di celle adiacenti sopra soglia, divisi finché non superano ~25 km².
+- `latest.json` e `data/layers/` non vengono salvati nel repo: vanno direttamente su Pages. Sui push di codice lo script `fetch_live.py` li recupera dal sito pubblicato.
+
+**Verifica sul passato (`backtest.py`, ogni lunedì)**
+- Ritrovamenti confermati iNaturalist degli ultimi 3 anni in regione.
+- Per ognuno confronta il meteo del ritrovamento con lo stesso punto e periodo dell'anno in anni diversi (caso-controllo: luogo e stagione uguali, conta solo il meteo).
+- Il meteo storico (Open-Meteo Archive) pesa molto sui limiti gratuiti: viene scaricato a rate, circa 3.000 chiamate per esecuzione, e salvato in `data/history.npz`.
+- A archivio completo stima ritardo della pioggia, scala della pioggia, penalità per la siccità e, per le specie con abbastanza dati, lo spostamento delle temperature ideali. Accetta i nuovi parametri solo se migliorano l'AUC in modo apprezzabile. Risultati in `data/model.json`, mostrati nell'app.
+- L'archivio si ricostruisce ogni ~5 mesi.
 
 ## Setup
-1. Modifica `config.json` (regione e `bbox`) e aggiungi `data/region.geojson`.
-2. Crea un repo pubblico su GitHub e fai push con git (non con l'upload web, che salta la cartella `.github`).
-3. Settings → Pages → Source: "GitHub Actions".
-4. Actions → "Aggiornamento dati funghi" → Run workflow.
-5. Apri https://TUONOME.github.io/NOMEREPO/ dal telefono e aggiungila alla schermata Home.
-
-Test locale: `python scripts/update.py && python -m http.server`
+1. `config.json`: elenco `regions` con i nomi ISTAT (es. "Emilia-Romagna", "Toscana", "Liguria"). Se cambi regioni rilancia la preparazione.
+2. Settings → Pages → Source: GitHub Actions.
+3. Actions → «Preparazione dati statici» → Run workflow. Al termine avvia da solo «Aggiornamento dati funghi».
+4. Almeno un'ora dopo: Actions → «Verifica sul passato» → Run workflow. Poi prosegue da sola ogni lunedì finché l'archivio è completo.
 
 ## Note
-- Cron `15 3 * * *` (UTC). GitHub può ritardare i job schedulati di alcuni minuti, e li sospende dopo 60 giorni senza attività sul repo: i commit giornalieri del bot bastano a tenerlo attivo.
-- Griglia 0,1° (~10 km). A 0,05° le celle quadruplicano: verifica i limiti gratuiti di Open-Meteo (uso non commerciale).
-- Specie, stagioni, soglie di temperatura, quote, habitat e sosia sono in `species.json`: aggiungere un fungo significa aggiungere un oggetto lì. I nomi scientifici vengono convertiti in ID iNaturalist al primo run e salvati in `data/taxa.json`; se un nome non viene trovato lo script lo segnala nel log.
-- L'indice in `group_score()` è euristico: tara soglie e pesi confrontandolo con gli avvistamenti della tua zona.
-- Le coordinate iNaturalist di alcune osservazioni sono volutamente offuscate.
+- `species.json` contiene i parametri di partenza: tarali confrontando la mappa con i tuoi ritrovamenti.
+- Open-Meteo gratuito solo per uso non commerciale; circa 1.000 punti meteo al giorno restano sotto i limiti.
+- Limiti Open-Meteo gratuiti: 600 chiamate/minuto, 5.000/ora, 10.000/giorno. Aggiornamento e verifica girano a orari diversi per restarci dentro.
+- Attribuzioni: © ESA WorldCover project 2021 / Contains modified Copernicus Sentinel data (2021) processed by ESA WorldCover consortium; Copernicus HRL Dominant Leaf Type 2018 © European Union, Copernicus Land Monitoring Service, EEA; Copernicus DEM © DLR e.V. 2010-2014 and © Airbus Defence and Space GmbH 2014-2018 provided under COPERNICUS by the European Union and ESA.
