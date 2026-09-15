@@ -84,20 +84,47 @@ def elev_factor(g, cal, elev):
     return trap(elev, lo - 250, lo, hi, hi + 250)
 
 
+def neighbourhood(st, radius=2):
+    """Quota di bosco e di ambiente naturale (bosco + prati) nel raggio di ~2 km attorno a ogni cella.
+    Distingue un bosco vero da un filare o una golena in mezzo ai campi."""
+    south, west, step, rows, cols = st["grid"]
+    rows, cols = int(rows), int(cols)
+    r, c = np.divmod(st["idx"].astype(np.int64), cols)
+
+    def box_mean(values):
+        full = np.zeros((rows, cols))
+        full[r, c] = values                      # celle scartate (coltivi, urbano) = 0
+        cs = np.pad(full, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+        r0, r1 = np.clip(r - radius, 0, rows), np.clip(r + radius + 1, 0, rows)
+        c0, c1 = np.clip(c - radius, 0, cols), np.clip(c + radius + 1, 0, cols)
+        tot = cs[r1, c1] - cs[r0, c1] - cs[r1, c0] + cs[r0, c0]
+        return tot / ((r1 - r0) * (c1 - c0))
+
+    st["nb_tree"] = box_mean(st["f_tree"])
+    st["nb_nat"] = box_mean(np.clip(st["f_tree"] + st["f_open"], 0, 1))
+    return st
+
+
 def habitat_factor(g, st):
     ft, fo = st["f_tree"], st["f_open"]
+    nb_tree = st.get("nb_tree", ft)
+    nb_nat = st.get("nb_nat", ft + fo)
     if g["cover"] == "open":
-        h = trap(fo, 0.1, 0.45, 1, 1.01) * (1 - 0.5 * trap(ft, 0.5, 0.9, 1, 1.01))
+        h = trap(fo, 0.2, 0.5, 1, 1.01) * (1 - 0.5 * trap(ft, 0.5, 0.9, 1, 1.01))
+        h = h * (0.15 + 0.85 * trap(nb_nat, 0.35, 0.65, 1, 1.01))
     elif g["cover"] == "edge":
         h = np.clip(4 * ft * fo, 0, 1) * 0.8 + 0.2 * trap(fo, 0.2, 0.6, 1, 1.01)
+        h = h * (0.15 + 0.85 * trap(nb_nat, 0.35, 0.65, 1, 1.01)) * (0.3 + 0.7 * trap(nb_tree, 0.1, 0.3, 1, 1.01))
     else:
-        h = trap(ft, 0.1, 0.5, 1, 1.01)
+        h = trap(ft, 0.25, 0.6, 1, 1.01)
+        h = h * (0.15 + 0.85 * trap(nb_tree, 0.12, 0.35, 1, 1.01))
     leaf = g.get("leaf", "any")
     if leaf != "any" and "f_broad" in st:
         known = (st["f_broad"] + st["f_conif"]) > 0
         share = st["f_broad"] if leaf == "broad" else st["f_conif"]
         h = h * np.where(known, 0.25 + 0.75 * share, 0.8)
-    return h * (1 - trap(st["f_built"], 0.1, 0.4, 1, 1.01))
+    other = np.clip(1 - ft - fo, 0, 1)           # coltivi, urbano, acqua, suolo nudo
+    return h * (1 - 0.8 * trap(other, 0.3, 0.7, 1, 1.01)) * (1 - trap(st["f_built"], 0.1, 0.4, 1, 1.01))
 
 
 def aspect_factor(st, tmin, tmax, g):

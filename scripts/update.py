@@ -216,6 +216,7 @@ def main():
 
     w = fetch_weather(st, cfg)
     st["w_elev"] = w["EL"]
+    M.neighbourhood(st)
     t0 = cfg["past_days"]
     today = date.today()
     cache = {}

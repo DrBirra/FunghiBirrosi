@@ -170,11 +170,11 @@ function drawLayer(l) {
   const ctx = cv.getContext("2d"), img = ctx.createImageData(g.cols, g.rows), sd = l.s[day];
   l.i.forEach((idx, j) => {
     const s = sd[j];
-    if (s < 5) return;
+    if (s < 20) return;                       // sotto 20 non coloro: condizioni sfavorevoli
     const r = Math.floor(idx / g.cols), c = idx % g.cols;
     const p = ((g.rows - 1 - r) * g.cols + c) * 4, col = COLORS[Math.min(4, Math.floor(s / 20))];
     img.data[p] = col[0]; img.data[p + 1] = col[1]; img.data[p + 2] = col[2];
-    img.data[p + 3] = s < 20 ? 70 : 185;
+    img.data[p + 3] = s < 40 ? 120 : 190;
   });
   ctx.putImageData(img, 0, 0);
   if (overlay) map.removeLayer(overlay);

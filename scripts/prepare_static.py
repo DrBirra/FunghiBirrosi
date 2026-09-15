@@ -223,7 +223,8 @@ def region_mask(grid, geom):
 
 
 def calibrate(grid, elev_all, inside, cfg, groups):
-    """Quote (5°-95° percentile) e stagionalità dalle osservazioni confermate in regione."""
+    """Quote (10°-95° percentile) e stagionalità dalle osservazioni confermate in regione.
+    Il limite basso è più prudente: molte foto vengono da parchi e giardini in pianura."""
     t2g = resolve_taxa(groups)
     b = grid.bbox
     elevs = {g["id"]: [] for g in groups}
@@ -259,7 +260,7 @@ def calibrate(grid, elev_all, inside, cfg, groups):
         e, m = np.array(elevs[g["id"]]), months[g["id"]]
         entry = {"n_elev": int(e.size), "n_month": int(m.sum())}
         if e.size >= 30:
-            entry["elev"] = [int(max(0, np.percentile(e, 5) - 100)), int(np.percentile(e, 95) + 100)]
+            entry["elev"] = [int(max(0, np.percentile(e, 10) - 50)), int(np.percentile(e, 95) + 100)]
         if m.sum() >= 40:
             sm = np.convolve(np.r_[m[-1], m, m[0]], [0.25, 0.5, 0.25], "valid")  # mesi circolari
             w = sm / sm.max()
