@@ -8,7 +8,7 @@ concurrency: update-data
 jobs:
   prepare:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 180
     permissions:
       contents: write
       actions: write
@@ -30,6 +30,16 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           for f in data/static.npz data/cells.json data/calibration.json data/taxa.json data/area.json data/region.geojson; do [ -f "$f" ] && git add "$f"; done
           git diff --staged --quiet || { git commit -m "Dati statici $(date -u +%F)"; git pull --rebase; git push; }
+      - name: Pubblica il dettaglio a 100 m nel branch fine-data
+        run: |
+          [ -d data/fine ] || exit 0
+          rm -rf /tmp/fine && mkdir -p /tmp/fine && cp -r data/fine /tmp/fine/fine
+          cd /tmp/fine
+          git init -q -b fine-data
+          git config user.name "funghi-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add fine && git commit -q -m "Dettaglio 100 m $(date -u +%F)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" fine-data
       - name: Avvia l'aggiornamento giornaliero
         run: gh workflow run update.yml
         env:

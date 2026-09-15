@@ -10,7 +10,7 @@ di ogni specie sulle osservazioni storiche confermate di iNaturalist.
 Output: data/static.npz (per lo script giornaliero), data/cells.json (per la mappa),
         data/calibration.json
 """
-import json, math, os, time, urllib.parse
+import json, math, os, shutil, struct, time, urllib.parse, zlib
 from datetime import date
 
 import numpy as np
@@ -19,10 +19,12 @@ from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds as transform_from_bounds
 from rasterio.windows import from_bounds
 from rasterio.errors import RasterioIOError
-from shapely import contains_xy
+from shapely import contains_xy, intersects, prepare as shapely_prepare
+from shapely.geometry import box
 from shapely.geometry import shape
 from shapely.ops import unary_union
 
+import model as M
 from common import DATA, ROOT, area_name, get_bytes, get_json, group_of, load_config, load_groups, log, resolve_taxa, warn
 
 M_PER_DEG = 111_320
@@ -47,14 +49,19 @@ class Grid:
         return self.south + (r + 0.5) * self.step, self.west + (c + 0.5) * self.step
 
 
-def pixel_centers(transform, shape_):
+def raster_index(grid, t, shape_):
+    """Indice piatto della cella di griglia per ogni pixel del raster (-1 = fuori)."""
     h, w = shape_
-    cols = transform.c + (np.arange(w) + 0.5) * transform.a
-    rows = transform.f + (np.arange(h) + 0.5) * transform.e
-    return np.meshgrid(rows, cols, indexing="ij")  # lat, lon
+    lat = t.f + (np.arange(h) + 0.5) * t.e
+    lon = t.c + (np.arange(w) + 0.5) * t.a
+    r = np.floor((lat - grid.south) / grid.step).astype(np.int64)
+    c = np.floor((lon - grid.west) / grid.step).astype(np.int64)
+    okr = (r >= 0) & (r < grid.rows); okc = (c >= 0) & (c < grid.cols)
+    idx = r[:, None] * grid.cols + c[None, :]
+    return np.where(okr[:, None] & okc[None, :], idx, -1), lat
 
 
-def read_window(url, bbox, decimate=1):
+def read_window(url, bbox, decimate=1, target_res=None):
     """Legge solo la parte del tile dentro il bbox, opzionalmente sottocampionata
     (i COG hanno overview, quindi si scarica poco)."""
     with rasterio.open(url) as src:
@@ -63,6 +70,8 @@ def read_window(url, bbox, decimate=1):
         win = win.round_offsets().round_lengths()
         if win.width < 1 or win.height < 1:
             return None, None, None
+        if target_res:   # sottocampiono fino a circa la risoluzione richiesta
+            decimate = max(1, int(target_res / abs(src.transform.a)))
         out_shape = (max(1, int(win.height // decimate)), max(1, int(win.width // decimate)))
         arr = src.read(1, window=win, out_shape=out_shape)
         t = src.window_transform(win) * rasterio.Affine.scale(win.width / out_shape[1], win.height / out_shape[0])
@@ -82,7 +91,7 @@ def landcover_tiles(bbox):
             yield f"{'N' if la >= 0 else 'S'}{abs(la):02d}{'E' if lo >= 0 else 'W'}{abs(lo):03d}"
 
 
-def terrain(grid, cfg):
+def terrain(grid, cfg, quiet=False):
     """Quota media e vettore gradiente medio per cella."""
     s_elev = np.zeros(grid.n); s_gx = np.zeros(grid.n); s_gy = np.zeros(grid.n)
     s_slope = np.zeros(grid.n); cnt = np.zeros(grid.n)
@@ -91,21 +100,21 @@ def terrain(grid, cfg):
         try:
             arr, t, nodata = read_window(url, grid.bbox)
         except RasterioIOError:
-            log(f"  DEM {name}: assente (mare)")
+            quiet or log(f"  DEM {name}: assente (mare)")
             continue
         if arr is None:
             continue
-        log(f"  DEM {name}: {arr.shape}")
+        quiet or log(f"  DEM {name}: {arr.shape}")
         z = arr.astype("float64")
         if nodata is not None:
             z[z == nodata] = np.nan
-        lat, lon = pixel_centers(t, z.shape)
+        idx2, lat_rows = raster_index(grid, t, z.shape)
         dy = abs(t.e) * M_PER_DEG
-        dx = t.a * M_PER_DEG * np.cos(np.radians(lat))
+        dx = t.a * M_PER_DEG * np.cos(np.radians(lat_rows))[:, None]
         gy_rows, gx_cols = np.gradient(z)
         gx = gx_cols / dx                      # dz verso est
         gy = -gy_rows / dy                     # dz verso nord (le righe scendono verso sud)
-        idx = grid.flat_index(lat, lon).ravel()
+        idx = idx2.ravel()
         ok = (idx >= 0) & np.isfinite(z.ravel()) & np.isfinite(gx.ravel()) & np.isfinite(gy.ravel())
         i = idx[ok]
         s_elev += np.bincount(i, z.ravel()[ok], grid.n)
@@ -125,32 +134,32 @@ def terrain(grid, cfg):
 LC_CLASSES = {"tree": [10], "open": [20, 30], "crop": [40], "built": [50], "water": [80, 90]}
 
 
-def landcover(grid, cfg):
+def landcover(grid, cfg, decimate=8, quiet=False, target_res=None):
     counts = {k: np.zeros(grid.n) for k in LC_CLASSES}
     total = np.zeros(grid.n)
     for tile in landcover_tiles(grid.bbox):
         url = cfg["sources"]["landcover"].format(tile=tile)
         try:
-            arr, t, _ = read_window(url, grid.bbox, decimate=8)   # ~80 m
+            arr, t, _ = read_window(url, grid.bbox, decimate=decimate, target_res=target_res)
         except RasterioIOError:
-            warn(f"WorldCover {tile} non disponibile")
+            quiet or warn(f"WorldCover {tile} non disponibile")
             continue
         if arr is None:
             continue
-        log(f"  WorldCover {tile}: {arr.shape}")
-        lat, lon = pixel_centers(t, arr.shape)
-        idx = grid.flat_index(lat, lon).ravel()
+        quiet or log(f"  WorldCover {tile}: {arr.shape}")
+        idx = raster_index(grid, t, arr.shape)[0].ravel()
         v = arr.ravel()
         ok = (idx >= 0) & (v > 0)
         total += np.bincount(idx[ok], minlength=grid.n)
         for k, cls in LC_CLASSES.items():
             m = ok & np.isin(v, cls)
             counts[k] += np.bincount(idx[m], minlength=grid.n)
+        del idx, v, arr
     with np.errstate(invalid="ignore", divide="ignore"):
         return {k: np.nan_to_num(c / total) for k, c in counts.items()}
 
 
-def leaf_type(grid, cfg):
+def leaf_type(grid, cfg, quiet=False):
     """Frazione di latifoglie e conifere (Copernicus HRL Dominant Leaf Type 2018),
     scaricata a blocchi da 1° a ~100 m. Se il servizio non risponde il modello
     tratta il tipo di bosco come sconosciuto."""
@@ -174,14 +183,13 @@ def leaf_type(grid, cfg):
                 warn(f"tipo di bosco {la}N {lo}E non disponibile: {ex}")
                 continue
             t = transform_from_bounds(w, s, e, n, arr.shape[1], arr.shape[0])
-            lat, lon = pixel_centers(t, arr.shape)
-            idx = grid.flat_index(lat, lon).ravel()
+            idx = raster_index(grid, t, arr.shape)[0].ravel()
             v = arr.ravel()
             m = idx >= 0
             broad += np.bincount(idx[m & (v == 1)], minlength=grid.n)
             conif += np.bincount(idx[m & (v == 2)], minlength=grid.n)
             ok_any = True
-            log(f"  tipo di bosco {la}N {lo}E: {arr.shape}")
+            quiet or log(f"  tipo di bosco {la}N {lo}E: {arr.shape}")
     tot = broad + conif
     with np.errstate(invalid="ignore", divide="ignore"):
         return np.nan_to_num(broad / tot), np.nan_to_num(conif / tot), ok_any
@@ -333,6 +341,74 @@ def calibrate(grid, elev_all, region_of, region_names, cfg, groups):
     return out
 
 
+FINE_STEP = 0.001          # ~100 m
+FINE_BUFFER = 25           # celle di margine per il vicinato (~2,5 km)
+
+
+def write_png_gray(path, img):
+    """PNG in scala di grigi a 8 bit, riga 0 = nord. Solo libreria standard."""
+    h, w = img.shape
+    raw = b"".join(b"\x00" + img[r].tobytes() for r in range(h))
+    chunk = lambda tag, data: struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+    png = (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 0, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+    with open(path, "wb") as f:
+        f.write(png)
+
+
+def fine_habitat(cfg, geom, parts, groups, cal):
+    """Idoneità statica (habitat × quota × tipo di bosco × urbano) a ~100 m, per specie,
+    in tile da 1°×1°. La mappa la moltiplica per l'indice meteo della cella da 1 km."""
+    out_dir = os.path.join(DATA, "fine")
+    shutil.rmtree(out_dir, ignore_errors=True)
+    os.makedirs(out_dir)
+    for g in groups:
+        os.makedirs(os.path.join(out_dir, g["id"]))
+    shapely_prepare(geom)
+    b = cfg["bbox"]
+    buf = FINE_BUFFER * FINE_STEP
+    tiles = []
+    todo = [(la, lo) for la in range(math.floor(b["south"]), math.ceil(b["north"]))
+            for lo in range(math.floor(b["west"]), math.ceil(b["east"]))
+            if intersects(geom, box(lo, la, lo + 1, la + 1))]
+    for n_tile, (la, lo) in enumerate(todo, 1):
+        t0 = time.time()
+        tb = {"south": la - buf, "west": lo - buf, "north": la + 1 + buf, "east": lo + 1 + buf}
+        grid = Grid(tb, FINE_STEP)
+        elev, slope, aspect, has_dem = terrain(grid, cfg, quiet=True)
+        lc = landcover(grid, cfg, quiet=True, target_res=FINE_STEP / 3)   # ~30-40 m, almeno 6 pixel per cella
+        f_broad, f_conif, _ = leaf_type(grid, cfg, quiet=True)
+        nb = neighbourhood_full(grid, lc, radius=FINE_BUFFER)
+        lat_c, lon_c = grid.centers()
+        region = np.full(grid.n, -1, np.int8)
+        for j, (_, poly) in enumerate(parts):
+            shapely_prepare(poly)
+            region[contains_xy(poly, lon_c, lat_c)] = j
+        del lat_c, lon_c
+
+        inner = np.zeros((grid.rows, grid.cols), bool)
+        inner[FINE_BUFFER:FINE_BUFFER + 1000, FINE_BUFFER:FINE_BUFFER + 1000] = True
+        sel = inner.ravel() & (region >= 0) & has_dem
+        if not sel.any():
+            continue
+        st = {"elev": np.nan_to_num(elev[sel]), "region": region[sel],
+              "f_tree": lc["tree"][sel], "f_open": lc["open"][sel], "f_built": lc["built"][sel],
+              "f_broad": f_broad[sel], "f_conif": f_conif[sel],
+              "nb_tree": nb["tree"][sel], "nb_nat": nb["nat"][sel], "nb_built": nb["built"][sel]}
+        rr, cc = np.divmod(np.flatnonzero(sel), grid.cols)
+        rr, cc = rr - FINE_BUFFER, cc - FINE_BUFFER
+        for g in groups:
+            v = M.habitat_factor(g, st) * M.elev_factor(g, cal, st)
+            img = np.zeros((1000, 1000), np.uint8)
+            img[999 - rr, cc] = np.clip(np.round(v * 255), 0, 255).astype(np.uint8)   # riga 0 = nord
+            write_png_gray(os.path.join(out_dir, g["id"], f"{la}_{lo}.png"), img)
+        tiles.append([la, lo])
+        log(f"  dettaglio 100 m: tile {la}N {lo}E ({n_tile}/{len(todo)}) in {time.time() - t0:.0f}s")
+    with open(os.path.join(out_dir, "index.json"), "w") as f:
+        json.dump({"step": FINE_STEP, "size": 1000, "tiles": tiles}, f)
+    return len(tiles)
+
+
 def main():
     cfg, groups = load_config(), load_groups()
     os.makedirs(DATA, exist_ok=True)
@@ -355,7 +431,7 @@ def main():
     nb = neighbourhood_full(grid, lc)
 
     habitat = lc["tree"] + lc["open"]
-    keep = inside & has_dem & (habitat >= 0.2) & (lc["built"] < 0.2) & (lc["water"] < 0.6)
+    keep = inside & has_dem & (habitat >= 0.03)
     idx = np.flatnonzero(keep)
     log(f"Celle con habitat utile: {idx.size} su {int(inside.sum())} in regione")
 
@@ -405,6 +481,12 @@ def main():
             json.dump(cal, f, indent=1)
     except Exception as e:
         warn(f"calibrazione saltata: {e}")
+        cal = {}
+
+    if cfg.get("fine_detail", True):
+        log("Dettaglio a 100 m…")
+        n = fine_habitat(cfg, geom, parts, groups, cal)
+        log(f"  {n} tile scritti in data/fine")
     log("Fatto.")
 
 

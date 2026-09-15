@@ -80,7 +80,10 @@ def reliability(day_offset, peak=8):
     return max(0.0, min(1.0, r))
 
 
-def score_day(g, st, w, t, day, cal, p, feat_cache):
+def score_day(g, st, w, t, day, cal, p, feat_cache, static_part):
+    """Ritorna (indice completo, parte dinamica).
+    parte dinamica = stagione × temperature × acqua × esposizione (0-100), senza habitat e quota:
+    la mappa la moltiplica per l'idoneità a 100 m quando si fa zoom."""
     key = (p["peak"], t)
     if key not in feat_cache:
         feat_cache[key] = features(w, t, p["peak"])
@@ -90,11 +93,12 @@ def score_day(g, st, w, t, day, cal, p, feat_cache):
     tmin = f["tmin"][k] - M.LAPSE * dz
     tmax = f["tmax"][k] - M.LAPSE * dz
     frost = f["frost"][k] - M.LAPSE * dz
-    s = (M.month_weight(g, cal, day) * M.elev_factor(g, cal, st) * M.habitat_factor(g, st)
-         * M.temp_factor(tmin, tmax, frost, g, p)
-         * M.water_factor(f["rain"][k], f["soil"][k], f["deficit"][k], p)
-         * M.aspect_factor(st, tmin, tmax, g))
-    return np.clip(100 * s, 0, 100)
+    dyn = (M.month_weight(g, cal, day)
+           * M.temp_factor(tmin, tmax, frost, g, p)
+           * M.water_factor(f["rain"][k], f["soil"][k], f["deficit"][k], p)
+           * M.aspect_factor(st, tmin, tmax, g))
+    dyn = np.clip(100 * dyn, 0, 100)
+    return np.clip(dyn * static_part, 0, 100), dyn
 
 
 # ---------------- zone ----------------
@@ -225,11 +229,17 @@ def main():
     zones = {}
     for g in groups:
         p = M.params_for(g, model)
-        days = [score_day(g, st, w, t0 + d, today + timedelta(days=d), cal, p, cache) for d in range(ndays)]
-        S = np.stack(days)                                  # (giorni, celle)
-        keep = S.max(0) >= 5
+        static_part = M.habitat_factor(g, st) * M.elev_factor(g, cal, st)
+        res = [score_day(g, st, w, t0 + d, today + timedelta(days=d), cal, p, cache, static_part) for d in range(ndays)]
+        S = np.stack([r[0] for r in res])                  # indice completo (giorni, celle)
+        Dy = np.stack([r[1] for r in res])                 # parte dinamica
+        keep_s = S.max(0) >= 5
+        # parte dinamica per TUTTE le celle, nell'ordine di cells.json, compressa in una stringa per giorno:
+        # carattere = 40 + valore/2 (0-100 -> "(" .. "Z"), niente escape JSON
+        d_str = ["".join(map(chr, 40 + np.round(row / 2).astype(int))) for row in Dy] if Dy.max() >= 5 else []
         with open(os.path.join(DATA, "layers", f"{g['id']}.json"), "w") as f:
-            json.dump({"i": st["idx"][keep].tolist(), "s": np.round(S[:, keep]).astype(int).tolist()}, f, separators=(",", ":"))
+            json.dump({"i": st["idx"][keep_s].tolist(), "s": np.round(S[:, keep_s]).astype(int).tolist(), "d": d_str},
+                      f, separators=(",", ":"))
         zones[g["id"]] = [hotspots(st, grid, S[d], S[min(d + 1, ndays - 1)]) for d in range(ndays)]
         log(f"  {g['id']}: oggi max {S[0].max():.0f}, fra 6 giorni max {S[-1].max():.0f}")
 

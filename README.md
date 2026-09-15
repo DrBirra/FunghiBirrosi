@@ -11,6 +11,11 @@ PWA statica che mostra, per ogni fungo commestibile comune, le zone da circa 1 k
 - Calibrazione sulle osservazioni confermate iNaturalist, corretta per lo sforzo di osservazione: scarica tutte le osservazioni di funghi dell'area come sfondo e, per ogni fascia di quota e regione, usa la quota della specie tra i funghi fotografati invece del numero assoluto di foto (che è alto vicino alle città). Le stime per regione partono da quella complessiva e se ne discostano solo dove ci sono dati.
 - Vicinato di ~2 km (bosco, ambiente naturale, urbano) calcolato sulla griglia completa: filari, golene e paesi vengono penalizzati.
 
+**Dettaglio a 100 m (nella preparazione)**
+- Per ogni specie calcola l'idoneità statica a ~100 m (habitat, vicinato, tipo di bosco, urbano, quota per regione) su tile da 1°×1° salvati come PNG a 8 bit.
+- I tile vanno nel branch `fine-data`, sovrascritto a ogni preparazione (non appesantisce la storia del repo), e l'aggiornamento li pubblica con il sito.
+- Nella mappa, da zoom 12 in su: valore del punto = parte meteo/stagionale della cella da 1 km × idoneità a 100 m. Il meteo resta a 1 km (e a ~7 km all'origine): scendere sotto non aggiungerebbe informazione reale.
+
 **Aggiornamento (`update.py`, ogni mattina)**
 - Meteo Open-Meteo su celle da 0,07° (circa 6–8 km): 21 giorni passati e 7 di previsione. Per Emilia-Romagna, Toscana e Liguria sono circa 1.000–1.300 punti, ~2.500 chiamate al giorno.
 - Temperature riportate alla quota di ogni cella da 1 km (0,65 °C ogni 100 m).

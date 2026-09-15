@@ -24,5 +24,6 @@
     "calls_per_run": 3000,
     "max_pages_per_species": 10
   },
-  "background_max_pages": 400
+  "background_max_pages": 400,
+  "fine_detail": true
 }

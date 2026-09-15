@@ -189,10 +189,111 @@ function seasonMonths(g) {
   return { months: g.months, cal: false };
 }
 
+
+// ---------- dettaglio a 100 m ----------
+// idoneità statica per specie (PNG da 1°×1°, 1000×1000 px) × parte meteo/stagionale della cella da 1 km
+const FINE_ZOOM = 12;
+let FINE = null, fineToken = 0;
+const fineImg = {}, dynCache = {}, fineOverlays = new Map();
+
+function loadFineTile(id, la, lo) {
+  const key = `${id}/${la}_${lo}`;
+  if (!fineImg[key]) fineImg[key] = new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const cv = document.createElement("canvas"); cv.width = cv.height = 1000;
+      const cx = cv.getContext("2d", { willReadFrequently: true });
+      cx.drawImage(im, 0, 0);
+      const d = cx.getImageData(0, 0, 1000, 1000).data, v = new Uint8Array(1e6);
+      for (let i = 0; i < 1e6; i++) v[i] = d[i * 4];
+      res(v);
+    };
+    im.onerror = () => res(null);
+    im.src = `data/fine/${key}.png`;
+  });
+  return fineImg[key];
+}
+
+async function dynGrid(id, d) {
+  const key = `${id}|${d}`;
+  if (!dynCache[key]) dynCache[key] = Promise.all([loadCells(), loadLayer(id)]).then(([cells, layer]) => {
+    const g = DATA.grid, arr = new Uint8Array(g.rows * g.cols), str = (layer.d || [])[d];
+    if (str) for (let j = 0; j < cells.i.length; j++) arr[cells.i[j]] = (str.charCodeAt(j) - 40) * 2;
+    return arr;
+  });
+  return dynCache[key];
+}
+
+function composeFine(v, dyn, la, lo) {
+  const g = DATA.grid, cv = document.createElement("canvas"); cv.width = cv.height = 1000;
+  const ctx = cv.getContext("2d"), img = ctx.createImageData(1000, 1000), px = img.data;
+  const rowCell = new Int32Array(1000), colCell = new Int32Array(1000);
+  for (let y = 0; y < 1000; y++) { const r = Math.floor((la + 1 - (y + 0.5) * 0.001 - g.south) / g.step); rowCell[y] = r >= 0 && r < g.rows ? r * g.cols : -1; }
+  for (let x = 0; x < 1000; x++) { const c = Math.floor((lo + (x + 0.5) * 0.001 - g.west) / g.step); colCell[x] = c >= 0 && c < g.cols ? c : -1; }
+  for (let y = 0; y < 1000; y++) {
+    const rc = rowCell[y]; if (rc < 0) continue;
+    for (let x = 0; x < 1000; x++) {
+      const i = y * 1000 + x, h = v[i];
+      if (!h || colCell[x] < 0) continue;
+      const sc = dyn[rc + colCell[x]] * h / 255;
+      if (sc < 20) continue;
+      const col = COLORS[Math.min(4, Math.floor(sc / 20))], p = i * 4;
+      px[p] = col[0]; px[p + 1] = col[1]; px[p + 2] = col[2]; px[p + 3] = sc < 40 ? 120 : 190;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return cv.toDataURL();
+}
+
+const fineActive = () => !!FINE && map.getZoom() >= FINE_ZOOM;
+
+async function renderFine() {
+  const token = ++fineToken, prefix = `${current.id}|${day}|`;
+  for (const [key, ov] of fineOverlays) if (!key.startsWith(prefix)) { map.removeLayer(ov); fineOverlays.delete(key); }
+  if (!fineActive()) {
+    for (const ov of fineOverlays.values()) map.removeLayer(ov);
+    if (overlay && !map.hasLayer(overlay)) { overlay.addTo(map); overlay.bringToBack(); }
+    updateHeader();
+    return;
+  }
+  const b = map.getBounds();
+  const wanted = FINE.tiles.filter(([la, lo]) => la < b.getNorth() && la + 1 > b.getSouth() && lo < b.getEast() && lo + 1 > b.getWest());
+  const dyn = await dynGrid(current.id, day);
+  if (token !== fineToken) return;
+  const keys = new Set();
+  for (const [la, lo] of wanted) {
+    const key = prefix + `${la}_${lo}`; keys.add(key);
+    if (fineOverlays.has(key)) continue;
+    const v = await loadFineTile(current.id, la, lo);
+    if (token !== fineToken) return;
+    if (!v) continue;
+    fineOverlays.set(key, L.imageOverlay(composeFine(v, dyn, la, lo), [[la, lo], [la + 1, lo + 1]], { interactive: false }));
+  }
+  for (const [key, ov] of fineOverlays) {
+    if (keys.has(key)) { if (!map.hasLayer(ov)) { ov.addTo(map); ov.bringToBack(); } }
+    else if (map.hasLayer(ov)) map.removeLayer(ov);
+  }
+  if (overlay && map.hasLayer(overlay)) map.removeLayer(overlay);
+  updateHeader();
+}
+
+async function finePoint(latlng) {
+  if (!fineActive()) return null;
+  const la = Math.floor(latlng.lat), lo = Math.floor(latlng.lng);
+  if (!FINE.tiles.some(([a, o]) => a === la && o === lo)) return null;
+  const v = await loadFineTile(current.id, la, lo);
+  if (!v) return null;
+  const y = Math.floor((la + 1 - latlng.lat) / 0.001), x = Math.floor((latlng.lng - lo) / 0.001);
+  const g = DATA.grid, r = Math.floor((latlng.lat - g.south) / g.step), c = Math.floor((latlng.lng - g.west) / g.step);
+  const dyn = await dynGrid(current.id, day), h = v[Math.min(999, y) * 1000 + Math.min(999, x)];
+  return { habitat: Math.round(h / 2.55), score: Math.round(dyn[r * g.cols + c] * h / 255) };
+}
+
 async function refresh() {
   document.querySelectorAll("#groups .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.id === current.id));
   document.querySelectorAll("#days .chip").forEach(b => b.setAttribute("aria-pressed", +b.dataset.d === day));
   drawLayer(await loadLayer(current.id));
+  renderFine();
   renderZones();
   if (lastPoint) await showPoint(lastPoint.latlng, lastPoint.near, false);
   updateHeader();
@@ -213,7 +314,7 @@ function updateHeader() {
   if (focus) {
     $("score").textContent = focus.s;
     $("title").textContent = `${current.name}: ${label(focus.s)}`;
-    $("subtitle").textContent = `${focus.near ? "Vicino a te" : "Punto selezionato"}, ${when}${rel}`;
+    $("subtitle").textContent = `${focus.near ? "Vicino a te" : "Punto selezionato"}${focus.fine ? " (100 m)" : ""}, ${when}${rel}`;
     return;
   }
   if (zones.length) {
@@ -224,7 +325,7 @@ function updateHeader() {
     $("title").textContent = `${current.name}: nessuna zona favorevole`;
   }
   const updated = new Date(DATA.generated_at).toLocaleString("it-IT", { weekday: "long", hour: "2-digit", minute: "2-digit" });
-  $("subtitle").textContent = `${cap(when)}${rel} · aggiornato ${updated}`;
+  $("subtitle").textContent = `${cap(when)}${rel} · ${fineActive() ? "dettaglio 100 m" : FINE ? "avvicinati per il dettaglio 100 m" : "aggiornato " + updated}`;
 }
 
 function renderZones() {
@@ -294,8 +395,10 @@ async function showPoint(latlng, near = false, open = true) {
     const s = series[day], k = cells.k[cj], w = DATA.days[day], dz = cells.e[cj] - DATA.w_elev[k];
     const dir = cells.sl[cj] < 4 ? "pianeggiante" : DIRS[Math.round(cells.a[cj] / 45) % 8];
     const leafTxt = cells.fb && (cells.fb[cj] + cells.fc[cj]) > 0 ? `<dt>Latifoglie / conifere</dt><dd>${cells.fb[cj]} % / ${cells.fc[cj]} %</dd>` : "";
-    focus = { s, near };
-    html = `<div class="popup"><strong>${esc(current.name)}: ${label(s)}</strong> (${s}/100)<br>
+    const fp = await finePoint(latlng);
+    focus = fp ? { s: fp.score, near, fine: true } : { s, near };
+    const fineLine = fp ? `<strong>Nel punto (100 m): ${label(fp.score)}</strong> (${fp.score}/100)<br>Habitat qui: ${fp.habitat}% · cella da 1 km: ${s}/100<br>` : "";
+    html = `<div class="popup">${fineLine || `<strong>${esc(current.name)}: ${label(s)}</strong> (${s}/100)<br>`}
       ${cap(dayLabel(w.date, day))}${day >= 3 ? `, ${relText(w.reliability)}` : ""}
       <div class="spark" aria-label="Indice nei prossimi giorni">${series.map((v, d) => `<span class="${d === day ? "sel" : ""}" style="height:${Math.max(4, v)}%" title="${v}"></span>`).join("")}</div>
       <div class="spark-l">${DATA.days.map((x, d) => `<span>${d === 0 ? "oggi" : new Date(x.date + "T12:00:00").toLocaleDateString("it-IT", { weekday: "narrow" })}</span>`).join("")}</div>
@@ -312,7 +415,7 @@ async function showPoint(latlng, near = false, open = true) {
   if (open || map.hasLayer(popup)) popup.setLatLng(latlng).setContent(html).openOn(map);
   updateHeader();
 }
-const popup = L.popup();
+const popup = L.popup({ autoPanPaddingTopLeft: [10, 160], autoPanPaddingBottomRight: [10, 150], maxWidth: 280 });
 popup.on("remove", () => { focus = null; lastPoint = null; if (DATA) updateHeader(); });
 
 function obsPopup(o) {
@@ -325,6 +428,7 @@ function obsPopup(o) {
 }
 
 map.on("click", e => showPoint(e.latlng));
+map.on("zoomend moveend", () => { if (DATA && current) renderFine(); });
 
 $("locate").onclick = () => {
   if (!navigator.geolocation) return toast("Il browser non supporta la geolocalizzazione.");
@@ -376,6 +480,7 @@ Promise.all([getJSON("species.json"), getJSON("data/latest.json"), getJSON("data
     selectGroup(best);
     document.querySelector(`#groups .chip[data-id="${best.id}"]`)?.scrollIntoView({ inline: "center", block: "nearest" });
     loadCells();
+    getJSON("data/fine/index.json").then(x => { FINE = x; renderFine(); }).catch(() => {});
   })
   .catch(() => {
     $("title").textContent = "Dati non ancora pronti";

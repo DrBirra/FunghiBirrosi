@@ -2,3 +2,5 @@ __pycache__/
 # generati ogni mattina e pubblicati direttamente su Pages
 data/latest.json
 data/layers/
+# dettaglio a 100 m: salvato nel branch fine-data (sovrascritto, non appesantisce la storia)
+data/fine/

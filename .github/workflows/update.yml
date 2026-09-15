@@ -19,6 +19,16 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install numpy
+      - name: Dettaglio a 100 m
+        uses: actions/checkout@v4
+        continue-on-error: true
+        with:
+          ref: fine-data
+          path: _fine
+      - name: Copia il dettaglio
+        run: |
+          if [ -d _fine/fine ]; then mkdir -p data && rm -rf data/fine && mv _fine/fine data/fine; fi
+          rm -rf _fine
       - name: Dati
         run: |
           if [ ! -f data/static.npz ]; then
