@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2F3B2A">
+<title>Mappa funghi</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Alegreya+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bark:#2F3B2A; --lichen:#E6E9DF; --cap:#8A5A2B; --spore:#C9A36A; --ink:#23291F; --muted:#566050;
+    --s0:#DCDDD2; --s1:#D9C98F; --s2:#C39A4E; --s3:#8A5A2B; --s4:#4E2F17;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Alegreya Sans",system-ui,sans-serif;color:var(--ink);background:var(--lichen)}
+  #map{position:fixed;inset:0}
+  .leaflet-control-attribution{font-size:10px}
+  button:focus-visible{outline:3px solid var(--spore);outline-offset:2px}
+
+  .top{position:fixed;top:calc(env(safe-area-inset-top) + 10px);left:0;right:0;z-index:500;pointer-events:none}
+  .row{display:flex;gap:6px;padding:0 10px;pointer-events:auto}
+  .row + .row{margin-top:8px}
+  .groups{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .groups::-webkit-scrollbar{display:none}
+  .chip{flex:none;background:var(--lichen);color:var(--bark);border:0;border-radius:999px;
+    padding:9px 14px;font:500 15px/1 "Alegreya Sans",sans-serif;box-shadow:0 2px 8px rgba(35,41,31,.3);white-space:nowrap}
+  .chip[aria-pressed="true"]{background:var(--bark);color:var(--lichen)}
+  .chip .n{font-variant-numeric:tabular-nums;opacity:.7;margin-left:4px}
+  .spacer{flex:1}
+
+  .sheet{position:fixed;left:0;right:0;bottom:0;z-index:600;background:var(--lichen);
+    border-radius:22px 22px 0 0;box-shadow:0 -4px 20px rgba(35,41,31,.25);
+    padding:8px 20px calc(env(safe-area-inset-bottom) + 16px);max-height:75vh;overflow:auto;
+    transform:translateY(calc(100% - 132px));transition:transform .28s ease}
+  .sheet.open{transform:none}
+  @media (prefers-reduced-motion:reduce){.sheet{transition:none}}
+  .handle-hit{display:block;width:100%;background:none;border:0;padding:6px 0 10px;cursor:pointer}
+  .handle{display:block;margin:0 auto;width:44px;height:5px;border-radius:3px;background:#B9BEAE}
+
+  .here{display:flex;align-items:center;gap:14px}
+  .score{font-weight:800;font-size:52px;line-height:.9;color:var(--cap);min-width:74px;font-variant-numeric:tabular-nums}
+  .here h1{margin:0;font-size:20px;font-weight:700;line-height:1.15}
+  .here p{margin:2px 0 0;font-size:15px;color:var(--muted)}
+
+  .scale{display:grid;grid-template-columns:repeat(5,1fr);height:10px;border-radius:5px;overflow:hidden;margin:18px 0 4px}
+  .scale span:nth-child(1){background:var(--s0)}.scale span:nth-child(2){background:var(--s1)}
+  .scale span:nth-child(3){background:var(--s2)}.scale span:nth-child(4){background:var(--s3)}
+  .scale span:nth-child(5){background:var(--s4)}
+  .scale-labels{display:flex;justify-content:space-between;font-size:13px;color:var(--muted)}
+
+  .info{margin-top:20px;font-size:16px;line-height:1.45;max-width:60ch}
+  .info h2{font-size:17px;margin:16px 0 4px}
+  .info p{margin:0}
+  .danger{margin-top:16px;padding:12px 14px;border-left:4px solid #9B2F1A;background:#EFDDD3;border-radius:0 10px 10px 0}
+  .danger h2{margin-top:0;color:#7A2412}
+  .note{font-size:14px;line-height:1.45;color:var(--muted);margin:20px 0 0;max-width:60ch}
+
+  .popup{font-family:"Alegreya Sans",sans-serif;font-size:14px;min-width:190px}
+  .popup strong{font-size:16px}
+  .popup img{width:100%;border-radius:8px;margin-top:6px}
+  .popup dl{display:grid;grid-template-columns:auto auto;gap:2px 10px;margin:6px 0 0}
+  .popup dt{color:var(--muted)}.popup dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+  .tag{display:inline-block;font-size:12px;padding:2px 7px;border-radius:6px;background:#E3E0C9;color:#5B4A1E}
+  .tag.ok{background:#D6E2CB;color:#2F4A22}
+  .toast{position:fixed;top:110px;left:10px;right:10px;z-index:700;background:#EFDDD3;color:#5A2412;padding:12px 14px;border-radius:12px;font-size:15px}
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="Mappa delle condizioni di crescita dei funghi commestibili"></div>
+
+<div class="top">
+  <div class="row groups" id="groups" role="toolbar" aria-label="Scegli il fungo"></div>
+  <div class="row">
+    <button class="chip" id="locate">La mia posizione</button>
+    <span class="spacer"></span>
+    <button class="chip" id="toggleObs" aria-pressed="true">Avvistamenti</button>
+  </div>
+</div>
+
+<section class="sheet" id="sheet" aria-label="Dettagli">
+  <button class="handle-hit" id="handle" aria-expanded="false" aria-controls="sheet" aria-label="Espandi dettagli"><span class="handle"></span></button>
+  <div class="here">
+    <div class="score" id="score">–</div>
+    <div><h1 id="title">Caricamento dati…</h1><p id="subtitle"></p></div>
+  </div>
+  <div class="scale" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span></div>
+  <div class="scale-labels"><span>Condizioni scarse</span><span>Ottime</span></div>
+  <div class="info" id="info"></div>
+  <p class="note">L'indice stima quanto stagione, quota, meteo e suolo favoriscono la crescita: non garantisce la presenza del fungo e non serve a riconoscerlo. Gli avvistamenti vengono da iNaturalist e possono essere identificati male. Prima di mangiare qualsiasi fungo raccolto fallo controllare all'ispettorato micologico della tua ASL, e verifica le regole regionali su tesserino e quantità.</p>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+const COLORS = ["#DCDDD2","#D9C98F","#C39A4E","#8A5A2B","#4E2F17"];
+const MONTHS = ["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+const colorFor = s => COLORS[Math.min(4, Math.floor(s / 20))];
+const label = s => s >= 80 ? "condizioni ottime" : s >= 60 ? "condizioni buone" :
+                   s >= 40 ? "condizioni discrete" : s >= 20 ? "condizioni scarse" : "condizioni sfavorevoli";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+
+const map = L.map("map", { preferCanvas: true, zoomControl: false }).setView([43.4, 11.0], 8);
+L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
+  maxZoom: 17, attribution: "© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)" }).addTo(map);
+const indexLayer = L.layerGroup().addTo(map);
+const obsLayer = L.layerGroup().addTo(map);
+
+let DATA, GROUPS, current, focusCell = null, obsOn = true;
+const rects = [], markers = [];
+
+const scoreOf = c => c.s[current.id] ?? 0;
+const avgScore = () => Math.round(DATA.cells.reduce((a, c) => a + scoreOf(c), 0) / Math.max(1, DATA.cells.length));
+
+function cellPopup(c) {
+  return `<div class="popup"><strong>${esc(current.name)}: ${label(scoreOf(c))}</strong> (${scoreOf(c)}/100)
+    <dl><dt>Pioggia 5–14 gg fa</dt><dd>${c.rain_5_14} mm</dd>
+    <dt>Pioggia ultimi 5 gg</dt><dd>${c.rain_0_4} mm</dd>
+    <dt>Minime medie 7 gg</dt><dd>${c.tmin7} °C</dd>
+    <dt>Massime medie 7 gg</dt><dd>${c.tmax7} °C</dd>
+    <dt>Umidità suolo</dt><dd>${Math.round((c.soil7 ?? 0) * 100)} %</dd>
+    <dt>Quota media cella</dt><dd>${c.elev} m</dd></dl></div>`;
+}
+
+function obsPopup(o) {
+  const g = GROUPS.find(x => x.id === o.group);
+  return `<div class="popup"><strong>${esc(o.common ? cap(o.common) : g.name)}</strong><br>
+    <em>${esc(o.name)}</em>, ${esc(o.date)}<br>
+    <span class="tag ${o.confirmed ? "ok" : ""}">${o.confirmed ? "Identificazione confermata" : "Da confermare"}</span>
+    ${o.photo ? `<img src="${esc(o.photo)}" alt="Foto dell'avvistamento" loading="lazy">` : ""}
+    <br><a href="${esc(o.url)}" target="_blank" rel="noopener">Apri su iNaturalist</a></div>`;
+}
+
+function buildMap() {
+  const h = DATA.grid_step / 2;
+  DATA.cells.forEach(c => {
+    const r = L.rectangle([[c.lat - h, c.lon - h], [c.lat + h, c.lon + h]], { stroke: false })
+      .bindPopup(() => cellPopup(c)).on("click", () => { focusCell = c; updateSheet(); });
+    rects.push([r, c]); r.addTo(indexLayer);
+  });
+  DATA.observations.forEach(o => {
+    const m = L.circleMarker([o.lat, o.lon], { radius: 7, color: "#2F3B2A", weight: 2, fillColor: "#E6E9DF", fillOpacity: 1 })
+      .bindPopup(() => obsPopup(o));
+    markers.push([m, o]);
+  });
+  const b = DATA.bbox;
+  map.fitBounds([[b.south, b.west], [b.north, b.east]]);
+}
+
+function selectGroup(g) {
+  current = g;
+  document.querySelectorAll("#groups .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.id === g.id));
+  rects.forEach(([r, c]) => {
+    const s = scoreOf(c);
+    r.setStyle({ fillColor: colorFor(s), fillOpacity: s < 20 ? .2 : .55 });
+  });
+  obsLayer.clearLayers();
+  markers.forEach(([m, o]) => { if (o.group === g.id) m.addTo(obsLayer); });
+  updateSheet();
+}
+
+function updateSheet() {
+  const g = current;
+  const inSeason = g.months.includes(new Date().getMonth() + 1);
+  if (focusCell) {
+    const s = scoreOf(focusCell);
+    $("score").textContent = s;
+    $("title").textContent = `${g.name}: ${label(s)}`;
+    $("subtitle").textContent = focusCell.near ? "Nella zona più vicina a te" : "Nella zona selezionata";
+  } else {
+    const a = avgScore();
+    $("score").textContent = a;
+    $("title").textContent = `${g.name}: ${label(a)}`;
+    const updated = new Date(DATA.generated_at).toLocaleString("it-IT", { weekday: "long", hour: "2-digit", minute: "2-digit" });
+    $("subtitle").textContent = `Media ${DATA.region}, aggiornata ${updated}`;
+  }
+  const n = (DATA.counts || {})[g.id] || 0;
+  $("info").innerHTML = `
+    <p><strong>Stagione:</strong> ${g.months.map(m => MONTHS[m - 1]).join(", ")}${inSeason ? "" : " (ora fuori stagione)"}.
+    <strong>Quota:</strong> ${g.elev[0]}–${g.elev[1]} m.</p>
+    <h2>Dove cresce</h2><p>${esc(g.habitat)}</p>
+    <h2>Avvistamenti negli ultimi 14 giorni</h2><p>${n ? `${n} in regione.` : "Nessuno in regione."}</p>
+    <div class="danger"><h2>Sosia pericolosi</h2><p>${esc(g.lookalikes)}</p>
+    ${g.caution ? `<p style="margin-top:8px">${esc(g.caution)}</p>` : ""}</div>`;
+}
+
+function buildChips() {
+  const bar = $("groups");
+  GROUPS.forEach(g => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.dataset.id = g.id;
+    const n = (DATA.counts || {})[g.id];
+    b.innerHTML = `${esc(g.name)}${n ? `<span class="n">${n}</span>` : ""}`;
+    b.onclick = () => selectGroup(g);
+    bar.appendChild(b);
+  });
+}
+
+$("locate").onclick = () => {
+  if (!navigator.geolocation) return toast("Il browser non supporta la geolocalizzazione.");
+  navigator.geolocation.getCurrentPosition(p => {
+    const { latitude: lat, longitude: lon } = p.coords;
+    map.setView([lat, lon], 11);
+    L.circleMarker([lat, lon], { radius: 8, color: "#fff", weight: 3, fillColor: "#3A6EA5", fillOpacity: 1 }).addTo(map);
+    if (!DATA) return;
+    let best = null, d = Infinity;
+    for (const c of DATA.cells) {
+      const dd = (c.lat - lat) ** 2 + ((c.lon - lon) * Math.cos(lat * Math.PI / 180)) ** 2;
+      if (dd < d) { d = dd; best = c; }
+    }
+    if (best) { focusCell = { ...best, near: true }; updateSheet(); }
+  }, () => toast("Posizione non disponibile. Consenti l'accesso alla posizione nelle impostazioni del browser."));
+};
+$("toggleObs").onclick = () => {
+  obsOn = !obsOn;
+  $("toggleObs").setAttribute("aria-pressed", obsOn);
+  obsOn ? obsLayer.addTo(map) : map.removeLayer(obsLayer);
+};
+$("handle").onclick = () => $("handle").setAttribute("aria-expanded", $("sheet").classList.toggle("open"));
+
+function toast(msg) {
+  const el = document.createElement("div"); el.className = "toast"; el.textContent = msg;
+  document.body.appendChild(el); setTimeout(() => el.remove(), 6000);
+}
+
+Promise.all([
+  fetch("species.json", { cache: "no-cache" }).then(r => r.json()),
+  fetch("data/latest.json", { cache: "no-cache" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+]).then(([sp, data]) => {
+  GROUPS = sp.groups; DATA = data;
+  buildChips(); buildMap();
+  // parte dal fungo in stagione con l'indice medio più alto
+  const month = new Date().getMonth() + 1;
+  const pool = GROUPS.filter(g => g.months.includes(month));
+  current = GROUPS[0];
+  const best = (pool.length ? pool : GROUPS).map(g => { current = g; return [g, avgScore()]; }).sort((a, b) => b[1] - a[1])[0][0];
+  selectGroup(best);
+  document.querySelector(`#groups .chip[data-id="${best.id}"]`)?.scrollIntoView({ inline: "center", block: "nearest" });
+}).catch(() => {
+  $("title").textContent = "Dati non ancora disponibili";
+  $("subtitle").textContent = "Avvia il workflow «Aggiornamento dati funghi» da GitHub Actions.";
+});
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>

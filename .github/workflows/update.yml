@@ -1,0 +1,49 @@
+name: Aggiornamento dati funghi
+on:
+  schedule:
+    - cron: "15 3 * * *"   # 03:15 UTC = 05:15 ora legale / 04:15 ora solare
+  workflow_dispatch:
+  push:
+    branches: [main]
+concurrency: update-data
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Su push di codice riusa i dati esistenti; di mattina o a mano li rigenera
+      - name: Aggiorna dati
+        if: github.event_name != 'push' || hashFiles('data/latest.json') == ''
+        run: python scripts/update.py
+      - name: Commit dati
+        if: github.event_name != 'push' || hashFiles('data/latest.json') == ''
+        run: |
+          git config user.name "funghi-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/latest.json data/taxa.json
+          git diff --staged --quiet && exit 0
+          git commit -m "Dati del $(date -u +%F)"
+          git pull --rebase && git push
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

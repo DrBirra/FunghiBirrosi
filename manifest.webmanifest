@@ -1,0 +1,9 @@
+{
+  "name": "Mappa funghi",
+  "short_name": "Funghi",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#E6E9DF",
+  "theme_color": "#2F3B2A",
+  "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

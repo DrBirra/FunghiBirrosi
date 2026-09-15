@@ -1,0 +1,11 @@
+{
+  "region_name": "Toscana",
+  "bbox": { "south": 42.23, "west": 9.68, "north": 44.47, "east": 12.37 },
+  "grid_step_deg": 0.1,
+  "boundary_geojson": "data/region.geojson",
+  "min_elevation_m": 1,
+  "past_days": 21,
+  "inat_days_back": 14,
+  "inat_max_pages": 5,
+  "timezone": "Europe/Rome"
+}

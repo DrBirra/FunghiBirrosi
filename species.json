@@ -1,0 +1,137 @@
+{
+  "_nota": "Parametri euristici indicativi per l'Italia centro-settentrionale: tarali sulla tua zona. tmin = [zero, ottimo_da, ottimo_a, zero] per le minime medie a 7 giorni; months = mesi di stagione piena.",
+  "groups": [
+    {
+      "id": "porcini",
+      "name": "Porcini",
+      "taxa": ["Boletus edulis", "Boletus aereus", "Boletus reticulatus", "Boletus pinophilus"],
+      "months": [6, 7, 8, 9, 10, 11],
+      "tmin": [3, 9, 16, 21],
+      "tmax_max": 28,
+      "elev": [200, 1800],
+      "habitat": "Faggete, castagneti, querceti, abetaie e pinete.",
+      "lookalikes": "Porcino malefico (Rubroboletus satanas), tossico. Porcino amaro (Tylopilus felleus), rovina il piatto.",
+      "caution": null
+    },
+    {
+      "id": "finferli",
+      "name": "Finferli",
+      "taxa": ["Cantharellus cibarius", "Cantharellus pallens"],
+      "months": [6, 7, 8, 9, 10],
+      "tmin": [4, 9, 16, 21],
+      "tmax_max": 29,
+      "elev": [0, 1800],
+      "habitat": "Boschi di latifoglie e conifere, spesso tra muschio.",
+      "lookalikes": "Fungo dell'olivo (Omphalotus olearius), tossico. Falso gallinaccio (Hygrophoropsis aurantiaca).",
+      "caution": null
+    },
+    {
+      "id": "ovolo",
+      "name": "Ovolo buono",
+      "taxa": ["Amanita caesarea"],
+      "months": [7, 8, 9, 10],
+      "tmin": [8, 13, 19, 23],
+      "tmax_max": 32,
+      "elev": [0, 1000],
+      "habitat": "Querceti e castagneti caldi e soleggiati.",
+      "lookalikes": "Ovolo malefico (Amanita muscaria), tossico. Allo stadio di uovo chiuso si confonde con amanite mortali come la tignosa verdognola (Amanita phalloides).",
+      "caution": "In molte regioni è vietato raccoglierlo allo stadio di uovo chiuso."
+    },
+    {
+      "id": "mazza",
+      "name": "Mazza di tamburo",
+      "taxa": ["Macrolepiota procera"],
+      "months": [7, 8, 9, 10, 11],
+      "tmin": [3, 8, 16, 21],
+      "tmax_max": 30,
+      "elev": [0, 1500],
+      "habitat": "Radure, margini dei boschi e prati.",
+      "lookalikes": "Piccole lepiote (Lepiota spp.), alcune mortali. Chlorophyllum spp., tossiche.",
+      "caution": "Si consuma solo il cappello, ben cotto."
+    },
+    {
+      "id": "chiodini",
+      "name": "Chiodini",
+      "taxa": ["Armillaria mellea"],
+      "months": [9, 10, 11, 12],
+      "tmin": [0, 4, 12, 17],
+      "tmax_max": 24,
+      "elev": [0, 1500],
+      "habitat": "A cespi su ceppi e radici di latifoglie.",
+      "lookalikes": "Galerina marginata, mortale. Falso chiodino (Hypholoma fasciculare), tossico.",
+      "caution": "Tossici crudi o poco cotti: vanno sbollentati e l'acqua va buttata."
+    },
+    {
+      "id": "prugnolo",
+      "name": "Prugnolo",
+      "taxa": ["Calocybe gambosa"],
+      "months": [4, 5, 6],
+      "tmin": [0, 4, 11, 16],
+      "tmax_max": 26,
+      "elev": [0, 1600],
+      "habitat": "Prati, pascoli e siepi di prugnolo e biancospino, spesso in cerchi.",
+      "lookalikes": "Entoloma sinuatum, tossico. Inocybe spp., tossiche.",
+      "caution": null
+    },
+    {
+      "id": "spugnole",
+      "name": "Spugnole",
+      "taxa": ["Morchella"],
+      "months": [3, 4, 5],
+      "tmin": [-2, 2, 10, 14],
+      "tmax_max": 24,
+      "elev": [0, 1500],
+      "habitat": "Boschi ripariali, frassineti, zone bruciate e terreni smossi.",
+      "lookalikes": "Falsa spugnola (Gyromitra esculenta), mortale.",
+      "caution": "Tossiche crude: vanno cotte a lungo."
+    },
+    {
+      "id": "trombetta",
+      "name": "Trombetta dei morti",
+      "taxa": ["Craterellus cornucopioides"],
+      "months": [8, 9, 10, 11],
+      "tmin": [2, 7, 14, 19],
+      "tmax_max": 27,
+      "elev": [200, 1500],
+      "habitat": "Faggete e querceti umidi, a gruppi tra le foglie.",
+      "lookalikes": "Pochi sosia, ma è facile non distinguerla dalle foglie scure.",
+      "caution": null
+    },
+    {
+      "id": "steccherino",
+      "name": "Steccherino dorato",
+      "taxa": ["Hydnum repandum", "Hydnum rufescens"],
+      "months": [8, 9, 10, 11],
+      "tmin": [2, 7, 14, 19],
+      "tmax_max": 27,
+      "elev": [0, 1600],
+      "habitat": "Boschi di latifoglie e conifere.",
+      "lookalikes": "Sotto il cappello ha aculei e non lamelle, il che lo rende riconoscibile. Gli esemplari vecchi diventano amari.",
+      "caution": null
+    },
+    {
+      "id": "sanguinello",
+      "name": "Sanguinello",
+      "taxa": ["Lactarius deliciosus", "Lactarius sanguifluus"],
+      "months": [9, 10, 11],
+      "tmin": [2, 6, 14, 19],
+      "tmax_max": 27,
+      "elev": [0, 1800],
+      "habitat": "Pinete.",
+      "lookalikes": "Lattario torminoso (Lactarius torminosus), tossico.",
+      "caution": null
+    },
+    {
+      "id": "orecchione",
+      "name": "Orecchione",
+      "taxa": ["Pleurotus ostreatus"],
+      "months": [10, 11, 12, 1, 2],
+      "tmin": [-4, 0, 9, 14],
+      "tmax_max": 22,
+      "elev": [0, 1200],
+      "habitat": "Su tronchi di pioppi, faggi e altre latifoglie.",
+      "lookalikes": "Fungo dell'olivo (Omphalotus olearius) su ceppi, tossico.",
+      "caution": null
+    }
+  ]
+}
