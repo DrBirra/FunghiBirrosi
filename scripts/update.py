@@ -90,7 +90,7 @@ def score_day(g, st, w, t, day, cal, p, feat_cache):
     tmin = f["tmin"][k] - M.LAPSE * dz
     tmax = f["tmax"][k] - M.LAPSE * dz
     frost = f["frost"][k] - M.LAPSE * dz
-    s = (M.month_weight(g, cal, day) * M.elev_factor(g, cal, st["elev"]) * M.habitat_factor(g, st)
+    s = (M.month_weight(g, cal, day) * M.elev_factor(g, cal, st) * M.habitat_factor(g, st)
          * M.temp_factor(tmin, tmax, frost, g, p)
          * M.water_factor(f["rain"][k], f["soil"][k], f["deficit"][k], p)
          * M.aspect_factor(st, tmin, tmax, g))

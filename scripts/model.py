@@ -79,14 +79,30 @@ def month_weight(g, cal, day):
     return 0.4 if (m % 12) + 1 in months or ((m - 2) % 12) + 1 in months else 0.0
 
 
-def elev_factor(g, cal, elev):
-    lo, hi = cal.get(g["id"], {}).get("elev", g["elev"])
+def elev_factor(g, cal, st):
+    """Peso della quota. Se la calibrazione ha i pesi per fascia (per regione) interpola quelli,
+    altrimenti usa l'intervallo generico di species.json."""
+    c = cal.get(g["id"], {})
+    elev = st["elev"]
+    if "elev_w" in c and "region" in st and "_elev_bands" in cal:
+        edges = np.array(cal["_elev_bands"], float)
+        mids = (edges[:-1] + edges[1:]) / 2
+        mids[-1] = edges[-2] + 300                      # l'ultima fascia è aperta
+        out = np.zeros(elev.shape)
+        pooled_any = next(iter(c["elev_w"].values()))
+        for j, name in enumerate(cal.get("_regions", [])):
+            m = st["region"] == j
+            out[m] = np.interp(elev[m], mids, np.array(c["elev_w"].get(name, pooled_any), float))
+        return out
+    lo, hi = g["elev"]
     return trap(elev, lo - 250, lo, hi, hi + 250)
 
 
 def neighbourhood(st, radius=2):
     """Quota di bosco e di ambiente naturale (bosco + prati) nel raggio di ~2 km attorno a ogni cella.
     Distingue un bosco vero da un filare o una golena in mezzo ai campi."""
+    if "nb_tree" in st:          # già calcolato sulla griglia completa dalla preparazione
+        return st
     south, west, step, rows, cols = st["grid"]
     rows, cols = int(rows), int(cols)
     r, c = np.divmod(st["idx"].astype(np.int64), cols)
@@ -124,7 +140,8 @@ def habitat_factor(g, st):
         share = st["f_broad"] if leaf == "broad" else st["f_conif"]
         h = h * np.where(known, 0.25 + 0.75 * share, 0.8)
     other = np.clip(1 - ft - fo, 0, 1)           # coltivi, urbano, acqua, suolo nudo
-    return h * (1 - 0.8 * trap(other, 0.3, 0.7, 1, 1.01)) * (1 - trap(st["f_built"], 0.1, 0.4, 1, 1.01))
+    urban = (1 - trap(st["f_built"], 0.03, 0.15, 1, 1.01)) * (1 - 0.7 * trap(st.get("nb_built", st["f_built"]), 0.04, 0.15, 1, 1.01))
+    return h * (1 - 0.8 * trap(other, 0.3, 0.7, 1, 1.01)) * urban
 
 
 def aspect_factor(st, tmin, tmax, g):

@@ -35,7 +35,7 @@ def fetch_cases(cfg, groups, start, end, in_area):
         ids = [str(t) for t, gid in t2g.items() if gid == g["id"]]
         if not ids:
             continue
-        for page in range(1, cfg["calibration_max_pages"] + 1):
+        for page in range(1, cfg["backtest"]["max_pages_per_species"] + 1):
             q = urllib.parse.urlencode({
                 "taxon_id": ",".join(ids), "quality_grade": "research", "geo": "true",
                 "swlat": b["south"], "swlng": b["west"], "nelat": b["north"], "nelng": b["east"],

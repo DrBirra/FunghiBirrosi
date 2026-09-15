@@ -214,7 +214,23 @@ def build_area(cfg):
         json.dump({"regions": cfg.get("regions"), "name": name, "bbox": bbox}, fp, ensure_ascii=False)
     cfg["bbox"], cfg["region_name"] = bbox, name
     log(f"Area: {name}, {bbox}")
-    return geom
+    parts = [(f["properties"].get("reg_name", name), shape(f["geometry"])) for f in feats]
+    return geom, parts
+
+
+def neighbourhood_full(grid, lc, radius=2):
+    """Media nel raggio di ~2 km di bosco, ambiente naturale e urbano, su tutte le celle
+    (anche quelle scartate), così un paese o una distesa di campi pesano davvero."""
+    out = {}
+    for name, arr in (("tree", lc["tree"]), ("nat", np.clip(lc["tree"] + lc["open"], 0, 1)), ("built", lc["built"])):
+        a = arr.reshape(grid.rows, grid.cols)
+        cs = np.pad(a, ((1, 0), (1, 0))).cumsum(0).cumsum(1)
+        r = np.arange(grid.rows); c = np.arange(grid.cols)
+        r0, r1 = np.clip(r - radius, 0, grid.rows), np.clip(r + radius + 1, 0, grid.rows)
+        c0, c1 = np.clip(c - radius, 0, grid.cols), np.clip(c + radius + 1, 0, grid.cols)
+        tot = cs[np.ix_(r1, c1)] - cs[np.ix_(r0, c1)] - cs[np.ix_(r1, c0)] + cs[np.ix_(r0, c0)]
+        out[name] = (tot / np.outer(r1 - r0, c1 - c0)).ravel()
+    return out
 
 
 def region_mask(grid, geom):
@@ -222,58 +238,105 @@ def region_mask(grid, geom):
     return contains_xy(geom, lon, lat)
 
 
-def calibrate(grid, elev_all, inside, cfg, groups):
-    """Quote (10°-95° percentile) e stagionalità dalle osservazioni confermate in regione.
-    Il limite basso è più prudente: molte foto vengono da parchi e giardini in pianura."""
+ELEV_BANDS = [0, 200, 400, 600, 800, 1000, 1300, 1600, 2000, 5000]
+
+
+def fetch_fungi_background(cfg, t2g):
+    """Tutte le osservazioni confermate di funghi nell'area, paginando per id.
+    Servono come "sfondo": dicono dove e quando la gente fotografa funghi in generale."""
+    b = cfg["bbox"]
+    out, id_above = [], 0
+    for page in range(cfg["background_max_pages"]):
+        q = urllib.parse.urlencode({
+            "taxon_id": 47170, "quality_grade": "research", "geo": "true",
+            "swlat": b["south"], "swlng": b["west"], "nelat": b["north"], "nelng": b["east"],
+            "per_page": 200, "order_by": "id", "order": "asc", "id_above": id_above,
+        })
+        res = get_json("https://api.inaturalist.org/v1/observations?" + q).get("results", [])
+        if not res:
+            break
+        for o in res:
+            if not o.get("geojson") or not o.get("observed_on"):
+                continue
+            lon, lat = o["geojson"]["coordinates"]
+            precise = not o.get("obscured") and (o.get("positional_accuracy") or 0) <= 1000
+            out.append((lat, lon, int(o["observed_on"][5:7]), group_of(o.get("taxon") or {}, t2g), precise))
+        id_above = res[-1]["id"]
+        if page % 25 == 0:
+            log(f"  sfondo: {len(out)} osservazioni")
+        time.sleep(1.1)
+    else:
+        warn(f"sfondo troncato a {len(out)} osservazioni: aumenta background_max_pages")
+    log(f"  sfondo: {len(out)} osservazioni di funghi confermate")
+    return out
+
+
+def band_share(sp, al, prior, k):
+    """Quota della specie tra i funghi osservati in ogni fascia, tirata verso `prior`
+    quando i dati sono pochi (stima bayesiana con k osservazioni fittizie)."""
+    return (sp + k * prior) / (al + k)
+
+
+def to_weights(share):
+    w = np.convolve(np.r_[share[0], share, share[-1]], [0.15, 0.7, 0.15], "valid")
+    w = w / w.max()
+    w[w < 0.15] = 0
+    return w
+
+
+def calibrate(grid, elev_all, region_of, region_names, cfg, groups):
     t2g = resolve_taxa(groups)
-    b = grid.bbox
-    elevs = {g["id"]: [] for g in groups}
+    bg = fetch_fungi_background(cfg, t2g)
+    nb, nr = len(ELEV_BANDS) - 1, len(region_names)
+    all_c = np.zeros((nr, nb)); sp_c = {g["id"]: np.zeros((nr, nb)) for g in groups}
     months = {g["id"]: np.zeros(12) for g in groups}
-    for g in groups:
-        ids = [str(t) for t, gid in t2g.items() if gid == g["id"]]
-        if not ids:
+    for lat, lon, month, gid, precise in bg:
+        i = grid.flat_index(np.array([lat]), np.array([lon]))[0]
+        if i < 0 or region_of[i] < 0:
             continue
-        for page in range(1, cfg["calibration_max_pages"] + 1):
-            q = urllib.parse.urlencode({
-                "taxon_id": ",".join(ids), "quality_grade": "research", "geo": "true",
-                "swlat": b["south"], "swlng": b["west"], "nelat": b["north"], "nelng": b["east"],
-                "per_page": 200, "page": page, "order": "desc", "order_by": "id",
-            })
-            data = get_json("https://api.inaturalist.org/v1/observations?" + q)
-            for o in data.get("results", []):
-                if not o.get("geojson") or not o.get("observed_on") or group_of(o.get("taxon") or {}, t2g) != g["id"]:
-                    continue
-                if (o.get("positional_accuracy") or 0) > 2000 or o.get("obscured"):
-                    continue  # coordinate troppo imprecise per stimare la quota
-                lon, lat = o["geojson"]["coordinates"]
-                i = grid.flat_index(np.array([lat]), np.array([lon]))[0]
-                if i < 0 or not inside[i]:
-                    continue
-                if np.isfinite(elev_all[i]):
-                    elevs[g["id"]].append(float(elev_all[i]))
-                months[g["id"]][int(o["observed_on"][5:7]) - 1] += 1
-            time.sleep(1.2)
-            if page * 200 >= data.get("total_results", 0):
-                break
-    out = {}
+        if gid:
+            months[gid][month - 1] += 1
+        if not precise or not np.isfinite(elev_all[i]):
+            continue
+        band = min(nb - 1, max(0, np.searchsorted(ELEV_BANDS, elev_all[i], side="right") - 1))
+        all_c[region_of[i], band] += 1
+        if gid:
+            sp_c[gid][region_of[i], band] += 1
+
+    out = {"_elev_bands": ELEV_BANDS, "_regions": region_names,
+           "_background": {r: int(all_c[j].sum()) for j, r in enumerate(region_names)}}
     for g in groups:
-        e, m = np.array(elevs[g["id"]]), months[g["id"]]
-        entry = {"n_elev": int(e.size), "n_month": int(m.sum())}
-        if e.size >= 30:
-            entry["elev"] = [int(max(0, np.percentile(e, 10) - 50)), int(np.percentile(e, 95) + 100)]
+        gid, m = g["id"], months[g["id"]]
+        entry = {"n": int(sp_c[gid].sum()), "n_month": int(m.sum())}
+        n_sp = sp_c[gid].sum()
+        if n_sp >= 25:
+            # Correzione per lo sforzo di osservazione: conta la quota della specie tra TUTTI i funghi
+            # fotografati in quella fascia, non il numero assoluto di foto (che è alto vicino alle città).
+            p_all = n_sp / max(1, all_c.sum())
+            pooled_share = band_share(sp_c[gid].sum(0), all_c.sum(0), p_all, k=30)
+            pooled = to_weights(pooled_share)
+            per_region = {}
+            for j, r in enumerate(region_names):
+                # ogni regione parte dalla stima complessiva e se ne discosta solo dove ha dati
+                share = band_share(sp_c[gid][j], all_c[j], pooled_share, k=60)
+                per_region[r] = [round(float(x), 2) for x in to_weights(share)]
+            entry["elev_w"] = per_region
+            good = np.flatnonzero(pooled >= 0.3)
+            entry["elev"] = [ELEV_BANDS[good.min()], ELEV_BANDS[good.max() + 1]]
         if m.sum() >= 40:
-            sm = np.convolve(np.r_[m[-1], m, m[0]], [0.25, 0.5, 0.25], "valid")  # mesi circolari
+            sm = np.convolve(np.r_[m[-1], m, m[0]], [0.25, 0.5, 0.25], "valid")
             w = sm / sm.max()
             entry["month_w"] = [round(float(x), 2) if x >= 0.08 else 0 for x in w]
-        out[g["id"]] = entry
-        log(f"  {g['id']}: {entry}")
+        out[gid] = entry
+        log(f"  {gid}: n={entry['n']} quota {entry.get('elev', 'generica')} "
+            + " ".join(f"{r[:3]}={v}" for r, v in entry.get("elev_w", {}).items()))
     return out
 
 
 def main():
     cfg, groups = load_config(), load_groups()
     os.makedirs(DATA, exist_ok=True)
-    geom = build_area(cfg)
+    geom, parts = build_area(cfg)
     grid = Grid(cfg["bbox"], cfg["fine_step_deg"])
     log(f"Griglia {grid.rows}x{grid.cols} celle da {cfg['fine_step_deg']}°")
 
@@ -284,9 +347,15 @@ def main():
     log("Tipo di bosco…")
     f_broad, f_conif, has_leaf = leaf_type(grid, cfg)
     inside = region_mask(grid, geom)
+    lat_c, lon_c = grid.centers()
+    region_names = [name for name, _ in parts]
+    region_of = np.full(grid.n, -1, np.int8)
+    for j, (_, poly) in enumerate(parts):
+        region_of[contains_xy(poly, lon_c, lat_c)] = j
+    nb = neighbourhood_full(grid, lc)
 
     habitat = lc["tree"] + lc["open"]
-    keep = inside & has_dem & (habitat >= 0.2) & (lc["built"] < 0.5) & (lc["water"] < 0.6)
+    keep = inside & has_dem & (habitat >= 0.2) & (lc["built"] < 0.2) & (lc["water"] < 0.6)
     idx = np.flatnonzero(keep)
     log(f"Celle con habitat utile: {idx.size} su {int(inside.sum())} in regione")
 
@@ -309,7 +378,8 @@ def main():
         os.path.join(DATA, "static.npz"),
         idx=idx, inside=np.flatnonzero(inside), elev=elev[idx], slope=slope[idx], aspect=aspect[idx],
         f_tree=lc["tree"][idx], f_open=lc["open"][idx], f_built=lc["built"][idx],
-        f_broad=f_broad[idx], f_conif=f_conif[idx],
+        f_broad=f_broad[idx], f_conif=f_conif[idx], region=region_of[idx],
+        nb_tree=nb["tree"][idx], nb_nat=nb["nat"][idx], nb_built=nb["built"][idx],
         k=k.ravel(), w_lat=w_lat, w_lon=w_lon,
         grid=np.array([grid.south, grid.west, grid.step, grid.rows, grid.cols]),
     )
@@ -322,13 +392,14 @@ def main():
         "fb": np.round(f_broad[idx] * 100).astype(int).tolist(),
         "fc": np.round(f_conif[idx] * 100).astype(int).tolist(),
         "k": k.ravel().tolist(),
+        "r": region_of[idx].tolist(), "regions": region_names,
     }
     with open(os.path.join(DATA, "cells.json"), "w") as f:
         json.dump(cells, f, separators=(",", ":"))
 
     log("Calibrazione sulle osservazioni storiche…")
     try:
-        cal = calibrate(grid, elev, inside, cfg, groups)
+        cal = calibrate(grid, elev, region_of, region_names, cfg, groups)
         cal["_generated"] = date.today().isoformat()
         with open(os.path.join(DATA, "calibration.json"), "w") as f:
             json.dump(cal, f, indent=1)

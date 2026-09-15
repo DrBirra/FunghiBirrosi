@@ -8,7 +8,8 @@ PWA statica che mostra, per ogni fungo commestibile comune, le zone da circa 1 k
 - Griglia da 0,01° (circa 1 km) ritagliata sui confini.
 - Quota media, pendenza ed esposizione da Copernicus DEM GLO-90.
 - Frazione di bosco, prati/arbusteti, coltivi, urbano e acqua da ESA WorldCover 10 m; le celle senza habitat utile vengono scartate.
-- Calibrazione di quote e stagionalità di ogni specie sulle osservazioni confermate iNaturalist in regione (servono almeno 30–40 osservazioni, altrimenti restano i valori di `species.json`).
+- Calibrazione sulle osservazioni confermate iNaturalist, corretta per lo sforzo di osservazione: scarica tutte le osservazioni di funghi dell'area come sfondo e, per ogni fascia di quota e regione, usa la quota della specie tra i funghi fotografati invece del numero assoluto di foto (che è alto vicino alle città). Le stime per regione partono da quella complessiva e se ne discostano solo dove ci sono dati.
+- Vicinato di ~2 km (bosco, ambiente naturale, urbano) calcolato sulla griglia completa: filari, golene e paesi vengono penalizzati.
 
 **Aggiornamento (`update.py`, ogni mattina)**
 - Meteo Open-Meteo su celle da 0,07° (circa 6–8 km): 21 giorni passati e 7 di previsione. Per Emilia-Romagna, Toscana e Liguria sono circa 1.000–1.300 punti, ~2.500 chiamate al giorno.

@@ -10,7 +10,6 @@
   "forecast_days": 7,
   "inat_days_back": 14,
   "inat_max_pages": 5,
-  "calibration_max_pages": 10,
   "timezone": "Europe/Rome",
   "sources": {
     "dem": "https://copernicus-dem-90m.s3.amazonaws.com/{name}/{name}.tif",
@@ -22,6 +21,8 @@
     "years": 3,
     "max_points": 90,
     "point_step_deg": 0.1,
-    "calls_per_run": 3000
-  }
+    "calls_per_run": 3000,
+    "max_pages_per_species": 10
+  },
+  "background_max_pages": 400
 }
