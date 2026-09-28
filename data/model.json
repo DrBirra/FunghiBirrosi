@@ -1,0 +1,55 @@
+{
+ "global": {
+  "peak": 10,
+  "rain_scale": 60,
+  "dry_k": 40,
+  "auc": 0.691,
+  "auc_default": 0.68,
+  "n": 278
+ },
+ "groups": {
+  "porcini": {
+   "n": 68,
+   "auc": 0.738
+  },
+  "finferli": {
+   "n": 37,
+   "auc": 0.757
+  },
+  "ovolo": {
+   "n": 31,
+   "auc": 0.712
+  },
+  "mazza": {
+   "n": 52,
+   "auc": 0.737
+  },
+  "chiodini": {
+   "n": 30,
+   "auc": 0.655
+  },
+  "prugnolo": {
+   "n": 8
+  },
+  "spugnole": {
+   "n": 27,
+   "auc": 0.416
+  },
+  "trombetta": {
+   "n": 33,
+   "auc": 0.684
+  },
+  "steccherino": {
+   "n": 13
+  },
+  "sanguinello": {
+   "n": 6
+  },
+  "orecchione": {
+   "n": 8
+  }
+ },
+ "_generated": "2026-09-28",
+ "_history": "2026-09-15",
+ "_cases": 467
+}
