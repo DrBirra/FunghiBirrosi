@@ -5,7 +5,7 @@
   "dry_k": 40,
   "auc": 0.69,
   "auc_default": 0.679,
-  "n": 280
+  "n": 281
  },
  "groups": {
   "porcini": {
@@ -25,8 +25,8 @@
    "auc": 0.737
   },
   "chiodini": {
-   "n": 30,
-   "auc": 0.655
+   "n": 31,
+   "auc": 0.656
   },
   "prugnolo": {
    "n": 8
@@ -49,7 +49,7 @@
    "n": 8
   }
  },
- "_generated": "2026-10-12",
+ "_generated": "2026-10-19",
  "_history": "2026-09-15",
- "_cases": 480
+ "_cases": 484
 }
