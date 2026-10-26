@@ -1,43 +1,43 @@
 {
  "global": {
-  "peak": 10,
-  "rain_scale": 60,
-  "dry_k": 40,
-  "auc": 0.69,
-  "auc_default": 0.679,
-  "n": 281
+  "peak": 8,
+  "rain_scale": 25,
+  "dry_k": 25,
+  "auc": 0.683,
+  "auc_default": 0.683,
+  "n": 282
  },
  "groups": {
   "porcini": {
    "n": 69,
-   "auc": 0.729
+   "auc": 0.703
   },
   "finferli": {
    "n": 37,
-   "auc": 0.757
+   "auc": 0.759
   },
   "ovolo": {
    "n": 32,
-   "auc": 0.72
+   "auc": 0.728
   },
   "mazza": {
-   "n": 52,
-   "auc": 0.737
+   "n": 51,
+   "auc": 0.741
   },
   "chiodini": {
    "n": 31,
-   "auc": 0.656
+   "auc": 0.665
   },
   "prugnolo": {
    "n": 8
   },
   "spugnole": {
    "n": 27,
-   "auc": 0.416
+   "auc": 0.419
   },
   "trombetta": {
-   "n": 33,
-   "auc": 0.684
+   "n": 35,
+   "auc": 0.657
   },
   "steccherino": {
    "n": 13
@@ -49,7 +49,7 @@
    "n": 8
   }
  },
- "_generated": "2026-10-19",
+ "_generated": "2026-10-26",
  "_history": "2026-09-15",
- "_cases": 484
+ "_cases": 490
 }
